@@ -170,6 +170,9 @@ struct CreateExamForm: View {
                 .accessibilityLabel(String(localized: "a11y.button.createExam"))
             }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(.ultraThinMaterial)
         .task {
             await loadClasses()
             loadExistingData()
@@ -281,7 +284,16 @@ struct EnterMarksForm: View {
                 }
             }
             .padding()
-            .background(.quaternary)
+            .background(
+                .regularMaterial,
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(.quaternary, lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
+            .padding()
 
             if isLoading {
                 Spacer()
