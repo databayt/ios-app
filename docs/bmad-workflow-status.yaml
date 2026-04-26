@@ -1,15 +1,20 @@
 ---
-# BMAD Workflow Status
+# BMAD Workflow Status — v3.0
 # Hogwarts iOS App
 
 project: hogwarts-ios
-version: 1.0.0
+version: 3.0.0
 created_at: 2025-12-17
-updated_at: 2026-02-09
+updated_at: 2026-04-26
+supersedes: v2.0
+notes: |
+  v3.0 introduces the full 48-epic taxonomy and cross-cutting invariants.
+  Existing 8 stories (AUTH-001..006 minus 005, DASH-001..003) are preserved.
+  ~157 new story stubs created under docs/stories/.
 
 # Current Position
 current_phase: implementation
-current_sprint: 7
+current_sprint: 8
 
 # BMAD Phases
 phases:
@@ -19,546 +24,215 @@ phases:
     completed_at: 2025-12-17
     artifacts:
       - docs/prd.md
-
   planning:
     status: complete
     started_at: 2025-12-17
-    completed_at: 2025-12-17
+    completed_at: 2026-04-26
     artifacts:
       - .claude/CLAUDE.md
-      - .claude/commands/analyst.md
-      - .claude/commands/architect.md
-      - .claude/commands/dev.md
-      - .claude/commands/qa.md
-      - .claude/commands/ui.md
-      - .claude/commands/status.md
-      - .claude/commands/next.md
-      - .claude/commands/build.md
-      - .claude/commands/story.md
-      - .claude/commands/sync.md
-
+      - .claude/commands/*
+      - docs/STORY-TEMPLATE.md
+      - docs/i18n.md
+      - docs/multitenancy.md
+      - docs/roles.md
+      - docs/backend-gaps.md
   solutioning:
     status: complete
     started_at: 2025-12-17
-    completed_at: 2026-02-08
+    completed_at: 2026-04-26
     artifacts:
-      - docs/architecture.md
-      - docs/prd.md (v2.0)
-      - docs/stories/
-
+      - docs/architecture.md (v3.0)
+      - docs/prd.md (v3.0)
+      - docs/epics/ (48 epic markdowns)
+      - docs/stories/ (165 story stubs)
+      - .claude/rules/ (i18n, multitenant, roles, api-mobile)
+      - scripts/check-string-parity.sh
+      - scripts/audit-tenant-scope.sh
+      - scripts/audit-i18n-hardcoded.sh
+      - .github/workflows/i18n-and-tenant-gates.yml
   implementation:
     status: in_progress
     started_at: 2026-02-08
     completed_at: null
-    current_sprint: 7
+    current_sprint: 8
 
-# Implementation Status (existing code)
+# Cross-Cutting Invariants (apply to every story)
+cross_cutting:
+  i18n_rtl:
+    enforced_by: scripts/audit-i18n-hardcoded.sh, scripts/check-string-parity.sh
+    target_parity: 0.99
+    namespaces: [admin, attendance, auth, banking, common, errors, finance, generate, home, lab, library, marking, messages, messaging, notifications, onboarding, profile, results, sales, transportation, whatsapp]
+  content_translation:
+    enforced_by: per-entity lang field render + on-demand translate banner
+    backend_endpoint: POST /api/mobile/translate (NEW — see docs/backend-gaps.md)
+  multi_tenancy:
+    enforced_by: scripts/audit-tenant-scope.sh, TenantContext.shared, schoolId predicate
+  roles:
+    enforced_by: docs/roles.md frontmatter declaration, core/auth/authorization.swift
+    supported: [DEVELOPER, ADMIN, TEACHER, STUDENT, GUARDIAN, ACCOUNTANT, STAFF, USER]
+  audit_log:
+    enforced_by: core/audit/audit-log.swift writes on every mutation
+  api_contract:
+    enforced_by: .claude/rules/api-mobile.md
+    base_url: https://kingfahad.databayt.org/api/mobile/
+
+# Phasing
+milestones:
+  M0:
+    name: Pilot Bring-up
+    duration_weeks: 10-14
+    goal: TestFlight private beta — student/parent/teacher read-only with full RTL + push + offline + GOV
+    blocking_backend_tickets:
+      - POST /api/mobile/translate (NEW)
+      - POST /api/mobile/account/delete
+      - GET /api/mobile/account/export
+      - POST /api/mobile/consent/*
+  M1:
+    name: Pilot Pro
+    duration_weeks: 8-12
+    goal: Public TestFlight — teacher MVP + Apple Pay + widgets + live activities
+    blocking_backend_tickets:
+      - POST /api/mobile/teacher/classes/:id/grades
+      - POST /api/mobile/teacher/classes/:id/attendance
+      - GET /api/mobile/invoices/*
+      - POST /api/mobile/payments/*
+      - GET /api/mobile/report-cards/*
+      - GET /api/mobile/teacher/schedule
+  M2:
+    name: Expansion + Watch + Vertical Depth
+    duration_weeks: 12-16
+    goal: Feature parity with kotlin v2 + Apple Watch + AI doc + admission
+
+# Epic Taxonomy (48 epics)
+epics:
+  # Foundation Layer (12)
+  F-CORE: { phase: M0, priority: P0, status: in_progress, stories: 11 }
+  F-DESIGN: { phase: M0, priority: P0, status: in_progress, stories: 8 }
+  F-LOCALE: { phase: M0, priority: P0, status: pending, stories: 12 }
+  F-OFFLINE: { phase: M0, priority: P0, status: in_progress, stories: 7 }
+  F-PUSH: { phase: M0, priority: P0, status: pending, stories: 8 }
+  F-MEDIA: { phase: M0/M1, priority: P1, status: pending, stories: 9 }
+  F-INTEGRATION: { phase: M0/M1, priority: P1, status: pending, stories: 6 }
+  F-SHARING: { phase: M0/M1, priority: P1, status: pending, stories: 5 }
+  F-SEARCH: { phase: M1, priority: P1, status: pending, stories: 5 }
+  F-INTENTS: { phase: M0/M1, priority: P1, status: in_progress, stories: 10, note: "INTENT-001..003 partly built — formalize" }
+  F-PLATFORM-CORE: { phase: M1, priority: P1, status: pending, stories: 10 }
+  F-PLATFORM-EXTENDED: { phase: M2, priority: P2, status: pending, stories: 5 }
+
+  # Identity & Onboarding (4)
+  AUTH: { phase: M0, priority: P0, status: in_progress, stories: 17, note: "AUTH-001..006 (minus 005) merged; AUTH-005 + AUTH-007..017 new" }
+  ONBOARD: { phase: M0, priority: P0, status: pending, stories: 7 }
+  PROFILE: { phase: M0, priority: P0, status: in_progress, stories: 9, note: "PROF-001/002 partial; need PROF-003..009" }
+  SETTINGS: { phase: M0, priority: P0, status: pending, stories: 9 }
+
+  # Role Surfaces (2)
+  HOME: { phase: M0, priority: P0, status: in_progress, stories: 8, note: "Substantially built; formalize + extend" }
+  DASHBOARD: { phase: M0, priority: P0, status: in_progress, stories: 14, note: "DASH-001..003 merged; DASH-S/G/T/A/AC tracks new" }
+
+  # Modules (24)
+  TIMETABLE: { phase: M0, priority: P0, status: pending, stories: 8 }
+  ATTENDANCE: { phase: M0/M1, priority: P0, status: in_progress, stories: 18, note: "Substantial reader build; teacher mark requires P1 backend" }
+  GRADES: { phase: M0/M1, priority: P0, status: in_progress, stories: 9, note: "Reader built; teacher entry requires P1 backend" }
+  REPORTCARD: { phase: M1, priority: P1, status: pending, stories: 6 }
+  EXAMS: { phase: M1, priority: P1, status: pending, stories: 13 }
+  ASSIGNMENTS: { phase: M1, priority: P1, status: pending, stories: 10 }
+  MESSAGING: { phase: M0, priority: P0, status: in_progress, stories: 27, note: "Substantial WhatsApp-style build; needs socket + offline queue + per-bubble lang" }
+  ANNOUNCE: { phase: M0, priority: P0, status: in_progress, stories: 10 }
+  NOTIF: { phase: M0, priority: P0, status: in_progress, stories: 8 }
+  FEES: { phase: M0/M1, priority: P0, status: pending, stories: 14, note: "Reader pending; payments block on P0 backend" }
+  EVENTS: { phase: M1, priority: P1, status: pending, stories: 7 }
+  LIBRARY: { phase: M2, priority: P2, status: pending, stories: 6 }
+  SUBJECTS: { phase: M1, priority: P1, status: pending, stories: 5 }
+  STREAM: { phase: M2, priority: P2, status: pending, stories: 10 }
+  QUIZ: { phase: M2, priority: P2, status: pending, stories: 7 }
+  IDCARD: { phase: M1/M2, priority: P1, status: pending, stories: 5 }
+  GUARDIAN-LINK: { phase: M0, priority: P0, status: in_progress, stories: 7 }
+  SUBSTITUTION: { phase: M2, priority: P2, status: pending, stories: 4 }
+  WELLBEING: { phase: M2, priority: P2, status: pending, stories: 4 }
+  AI-DOC: { phase: M2, priority: P2, status: pending, stories: 4 }
+  SUBSCRIPTION-SAAS: { phase: M2, priority: P2, status: pending, stories: 5 }
+  ADMISSION: { phase: M2, priority: P2, status: pending, stories: 6 }
+  TRANSPORT: { phase: M2, priority: P2, status: pending, stories: 4 }
+  GOV: { phase: M0, priority: P0, status: pending, stories: 8, note: "App Store BLOCKER" }
+
+  # Quality & Ship (6)
+  Q-TEST: { phase: M0/M1, priority: P0, status: in_progress, stories: 12 }
+  Q-A11Y: { phase: M0, priority: P0, status: pending, stories: 8 }
+  Q-PERF: { phase: M1, priority: P1, status: pending, stories: 7 }
+  Q-SECURITY: { phase: M1, priority: P1, status: pending, stories: 8 }
+  OBS: { phase: M0/M1, priority: P0, status: pending, stories: 6 }
+  SHIP: { phase: M0/M1, priority: P0, status: in_progress, stories: 8, note: "TestFlight already exists; needs assets + privacy manifest finalization" }
+
+# Implementation Status (substrate that exists in repo)
 implementation_status:
   core_infrastructure:
     api_client: implemented
+    api_client_mobile_prefix: pending  # CORE-001
     network_monitor: implemented
     auth_manager: implemented
+    auth_manager_mock_bypass: needs_removal  # CORE-003
     keychain_service: implemented
+    biometric_service: implemented
     tenant_context: implemented
-    data_container: implemented
     sync_engine: implemented
-    app_entry: implemented
-    app_delegate: implemented
-  shared_components:
-    user_model: implemented
-    core_models: implemented
-    loading_view: implemented
-    error_state_view: implemented
-    empty_state_view: implemented
-  features:
-    auth:
-      status: implemented
-      files: [login-view.swift, auth-manager.swift, keychain-service.swift]
-      notes: "Google OAuth, Facebook OAuth, Email/Password, School Selection, Session Management complete"
-    dashboard:
-      status: implemented
-      files: [dashboard-content.swift, admin-dashboard.swift, admin-dashboard-view-model.swift, dashboard-actions.swift, dashboard-types.swift]
-      notes: "Student, Teacher, Guardian, Admin dashboards complete"
-    students:
-      status: implemented
-      files: [students-content.swift, students-table.swift, students-form.swift, students-view-model.swift, student.swift, students-actions.swift, students-validation.swift, students-types.swift, student-detail-view.swift]
-      notes: "Full CRUD, search, year level filter, detail view with tabs"
-    attendance:
-      status: implemented
-      files: [attendance-content.swift, attendance-table.swift, attendance-form.swift, qr-scanner-view.swift, attendance-view-model.swift, attendance.swift, attendance-actions.swift, attendance-validation.swift, attendance-types.swift]
-      notes: "View history, calendar view, mark attendance (teacher), class student list"
-    grades:
-      status: implemented
-      files: [grades-content.swift, grade.swift, grades-types.swift, grades-validation.swift, grades-actions.swift, grades-view-model.swift, grades-table.swift, grades-form.swift, report-card-view.swift]
-      notes: "View results, grade entry (teacher), report card display, role-based views"
-    timetable:
-      status: implemented
-      files: [timetable-types.swift, timetable-actions.swift, timetable-view-model.swift, timetable-content.swift, timetable-week-view.swift, timetable-day-view.swift, class-detail-view.swift]
-      notes: "Weekly grid, daily timeline, class detail, role-based capabilities"
-    messages:
-      status: implemented
-      files: [messages-types.swift, messages-validation.swift, messages-actions.swift, messages-view-model.swift, chat-view-model.swift, messages-content.swift, conversation-row.swift, chat-view.swift, message-bubble.swift, compose-message-view.swift]
-      notes: "Conversation list, chat interface, send/receive, compose, offline-capable"
-    notifications:
-      status: implemented
-      files: [notifications-types.swift, notification-router.swift, notifications-actions.swift, notifications-view-model.swift, notifications-content.swift, notification-row.swift]
-      notes: "Notification list, filters, mark read, delete, push routing, deep linking"
-    profile:
-      status: implemented
-      files: [profile-content.swift, edit-profile-view.swift, notification-preferences-view.swift, profile-view-model.swift, profile-actions.swift, profile-types.swift, profile-validation.swift]
-      notes: "MVVM refactor, edit profile, notification prefs, theme settings, biometric toggle, language, logout"
+    pending_action_queue: implemented
+    audit_log: pending  # CORE-006
 
-# Epics
-epics:
-  - id: EPIC-001
-    name: Authentication
+  design_system:
+    atoms_count: 19
+    target_atoms: 30+  # DSGN-001
+    tokens_complete: false  # DSGN-002
+    liquid_glass_v2: in_progress  # DSGN-003
+    dynamic_type_pass: pending  # DSGN-004
+    rtl_audit: pending  # LOC-008
+
+  features_partial:
+    - auth (5/6 stories shipped, missing AUTH-005 + AUTH-007..017)
+    - dashboard (3/14 stories shipped, S/G/T/A/AC tracks pending)
+    - home (substantial scaffolding, customization pending)
+    - attendance (substantial; teacher mark needs P1 backend)
+    - grades (reader built; teacher entry needs P1)
+    - messaging (substantial WhatsApp-style scaffolding)
+
+  features_pending:
+    - exams, assignments, reportcard
+    - fees+payments, events
+    - library, subjects, stream, quiz
+    - idcard wallet, guardian (multi-child), substitution, wellbeing
+    - ai-doc, subscription-saas, admission, transport
+    - all q-* (test, a11y, perf, security)
+    - obs, ship
+
+# Backend Coordination
+backend_gaps_doc: docs/backend-gaps.md
+critical_path_blockers:
+  - id: TRANSLATE
+    endpoint: POST /api/mobile/translate
+    blocks: F-LOCALE LOC-010
     priority: P0
-    sprint: 1
-    status: complete
-    stories:
-      - id: AUTH-001
-        title: Google OAuth Sign-In
-        status: complete
-        priority: P0
-        story_file: docs/stories/AUTH-001-google-oauth.md
-      - id: AUTH-002
-        title: Facebook OAuth Sign-In
-        status: complete
-        priority: P0
-        story_file: docs/stories/AUTH-002-facebook-oauth.md
-      - id: AUTH-003
-        title: Email/Password Login
-        status: complete
-        priority: P0
-        story_file: docs/stories/AUTH-003-email-password.md
-      - id: AUTH-004
-        title: School Selection
-        status: complete
-        priority: P0
-        story_file: docs/stories/AUTH-004-school-selection.md
-      - id: AUTH-005
-        title: Biometric Unlock
-        status: complete
-        priority: P1
-        sprint: 4
-      - id: AUTH-006
-        title: Session Management
-        status: complete
-        priority: P0
-        story_file: docs/stories/AUTH-006-session-management.md
-
-  - id: EPIC-002
-    name: Dashboard
+    status: not_started
+  - id: ACCOUNT_DELETE
+    endpoint: POST /api/mobile/account/delete
+    blocks: GOV-004, SHIP
     priority: P0
-    sprint: 1-2
-    status: complete
-    stories:
-      - id: DASH-001
-        title: Student Dashboard
-        status: complete
-        priority: P0
-        story_file: docs/stories/DASH-001-student-dashboard.md
-      - id: DASH-002
-        title: Teacher Dashboard
-        status: complete
-        priority: P0
-        story_file: docs/stories/DASH-002-teacher-dashboard.md
-      - id: DASH-003
-        title: Guardian Dashboard
-        status: complete
-        priority: P0
-        story_file: docs/stories/DASH-003-guardian-dashboard.md
-      - id: DASH-004
-        title: Admin Dashboard
-        status: complete
-        priority: P1
-
-  - id: EPIC-003
-    name: Attendance
+    status: not_started
+  - id: ACCOUNT_EXPORT
+    endpoint: GET /api/mobile/account/export
+    blocks: GOV-003, SHIP
     priority: P0
-    sprint: 2
-    status: complete
-    stories:
-      - id: ATT-001
-        title: View Attendance History
-        status: complete
-        priority: P0
-      - id: ATT-002
-        title: Mark Attendance (Teacher)
-        status: complete
-        priority: P0
-      - id: ATT-003
-        title: QR Code Check-in
-        status: complete
-        priority: P1
-      - id: ATT-004
-        title: Submit Excuse (Guardian)
-        status: complete
-        priority: P1
-      - id: ATT-005
-        title: Attendance Stats
-        status: complete
-        priority: P1
-      - id: ATT-006
-        title: Bulk Attendance
-        status: complete
-        priority: P2
-
-  - id: EPIC-004
-    name: Grades
+    status: not_started
+  - id: CONSENT
+    endpoint: GET/POST /api/mobile/consent/*
+    blocks: GOV-001, GOV-002
     priority: P0
-    sprint: 2
-    status: complete
-    stories:
-      - id: GRADE-001
-        title: View Exam Results
-        status: complete
-        priority: P0
-      - id: GRADE-002
-        title: Report Card Display
-        status: complete
-        priority: P0
-      - id: GRADE-003
-        title: Grade History Charts
-        status: complete
-        priority: P1
-      - id: GRADE-004
-        title: Grade Entry (Teacher)
-        status: complete
-        priority: P0
-      - id: GRADE-005
-        title: GPA Display
-        status: complete
-        priority: P1
-
-  - id: EPIC-005
-    name: Timetable
-    priority: P1
-    sprint: 3
-    status: complete
-    stories:
-      - id: TIME-001
-        title: Weekly Schedule View
-        status: complete
-        priority: P0
-      - id: TIME-002
-        title: Daily Timeline View
-        status: complete
-        priority: P1
-      - id: TIME-003
-        title: Class Details
-        status: complete
-        priority: P1
-
-  - id: EPIC-006
-    name: Messaging
-    priority: P1
-    sprint: 3
-    status: complete
-    stories:
-      - id: MSG-001
-        title: Conversation List
-        status: complete
-        priority: P0
-      - id: MSG-002
-        title: Chat Interface
-        status: complete
-        priority: P0
-      - id: MSG-003
-        title: Send/Receive Messages
-        status: complete
-        priority: P0
-      - id: MSG-004
-        title: Push Notifications
-        status: complete
-        priority: P0
-
-  - id: EPIC-007
-    name: Notifications
-    priority: P1
-    sprint: 3
-    status: complete
-    stories:
-      - id: NOTIF-001
-        title: Notification List
-        status: complete
-        priority: P0
-      - id: NOTIF-002
-        title: Push Alerts (APNs)
-        status: complete
-        priority: P0
-      - id: NOTIF-003
-        title: Notification Preferences
-        status: complete
-        priority: P1
-
-  - id: EPIC-008
-    name: Students Management
+    status: not_started
+  - id: INVOICES
+    endpoint: GET /api/mobile/invoices/*
+    blocks: FEE-003, FEE-004
     priority: P0
-    sprint: 2
-    status: complete
-    stories:
-      - id: STU-001
-        title: Student List & Search
-        status: complete
-        priority: P0
-      - id: STU-002
-        title: Student Detail View
-        status: complete
-        priority: P0
-      - id: STU-003
-        title: Create/Edit Student
-        status: complete
-        priority: P1
-
-  - id: EPIC-009
-    name: Profile & Settings
-    priority: P2
-    sprint: 4
-    status: complete
-    stories:
-      - id: PROF-001
-        title: Profile View
-        status: complete
-        priority: P0
-      - id: PROF-002
-        title: Edit Profile
-        status: complete
-        priority: P1
-      - id: PROF-003
-        title: Language Toggle
-        status: complete
-        priority: P0
-      - id: PROF-004
-        title: Notification Settings
-        status: complete
-        priority: P1
-      - id: PROF-005
-        title: Theme Settings
-        status: complete
-        priority: P2
-      - id: PROF-006
-        title: Logout
-        status: complete
-        priority: P0
-
-  - id: EPIC-010
-    name: Polish & App Store Readiness
+    status: not_started
+  - id: PAYMENTS
+    endpoint: POST /api/mobile/payments/*
+    blocks: PAY-*
     priority: P0
-    sprint: 5
-    status: complete
-    stories:
-      - id: POLISH-001
-        title: Privacy Manifest
-        status: complete
-        priority: P0
-      - id: POLISH-002
-        title: Launch Screen
-        status: complete
-        priority: P0
-      - id: POLISH-003
-        title: Accessibility Labels
-        status: complete
-        priority: P0
-      - id: POLISH-004
-        title: Fix Force Unwrap
-        status: complete
-        priority: P0
-      - id: POLISH-005
-        title: Replace print() with os.Logger
-        status: complete
-        priority: P0
-      - id: POLISH-006
-        title: Localize Hardcoded Strings
-        status: complete
-        priority: P1
-      - id: POLISH-007
-        title: Unit Tests (7 features)
-        status: complete
-        priority: P1
-      - id: POLISH-008
-        title: Bulk Attendance Verification
-        status: complete
-        priority: P1
-      - id: POLISH-009
-        title: Sync Status Banner
-        status: complete
-        priority: P2
-      - id: POLISH-010
-        title: APIError Localization
-        status: complete
-        priority: P2
-
-# Sprint Plan
-sprints:
-  - number: 1
-    name: Foundation
-    status: complete
-    started_at: 2026-02-08
-    completed_at: 2026-02-09
-    goals:
-      - Session management and auth infrastructure
-      - Google + Facebook + Email authentication
-      - School selection (multi-tenant)
-      - Role-based dashboard routing
-      - Student, Teacher, Guardian dashboards
-    stories:
-      - AUTH-006  # Session first (blocks all auth)
-      - AUTH-001
-      - AUTH-002
-      - AUTH-003
-      - AUTH-004
-      - DASH-001
-      - DASH-002
-      - DASH-003
-
-  - number: 2
-    name: Core Features
-    status: complete
-    started_at: 2026-02-09
-    completed_at: 2026-02-09
-    goals:
-      - Students CRUD module
-      - Attendance module (view + mark)
-      - Grades module (view + report card)
-      - Admin dashboard
-    stories:
-      - STU-001
-      - STU-002
-      - STU-003
-      - ATT-001
-      - ATT-002
-      - GRADE-001
-      - GRADE-002
-      - GRADE-004
-      - DASH-004
-
-  - number: 3
-    name: Communication
-    status: complete
-    started_at: 2026-02-08
-    completed_at: 2026-02-08
-    goals:
-      - Timetable module
-      - Messaging module
-      - Push notifications (APNs)
-      - Notification center
-    stories:
-      - TIME-001
-      - TIME-002
-      - TIME-003
-      - MSG-001
-      - MSG-002
-      - MSG-003
-      - MSG-004
-      - NOTIF-001
-      - NOTIF-002
-
-  - number: 4
-    name: Completion
-    status: complete
-    started_at: 2026-02-09
-    completed_at: 2026-02-09
-    goals:
-      - Profile & settings
-      - Biometric unlock
-      - Full localization
-      - Remaining attendance features
-      - Grade history & GPA
-      - TestFlight prep
-    stories:
-      - PROF-001
-      - PROF-002
-      - PROF-003
-      - PROF-004
-      - PROF-005
-      - PROF-006
-      - AUTH-005
-      - ATT-003
-      - ATT-004
-      - ATT-005
-      - GRADE-003
-      - GRADE-005
-      - NOTIF-003
-
-  - number: 5
-    name: Polish & App Store Readiness
-    status: complete
-    started_at: 2026-02-08
-    completed_at: 2026-02-08
-    goals:
-      - Privacy Manifest (xcprivacy)
-      - Launch Screen configuration
-      - Accessibility labels (all 37 view files)
-      - Force unwrap elimination
-      - os.Logger replacing print() calls
-      - Localization of hardcoded strings
-      - Unit tests for 7 features (~42 new tests)
-      - Sync status banner
-      - Full Localizable.xcstrings (609 keys, en+ar)
-    stories:
-      - POLISH-001
-      - POLISH-002
-      - POLISH-003
-      - POLISH-004
-      - POLISH-005
-      - POLISH-006
-      - POLISH-007
-      - POLISH-008
-      - POLISH-009
-      - POLISH-010
-
-  - number: 6
-    name: Offline-First & Production Readiness
-    status: complete
-    started_at: 2026-02-08
-    completed_at: 2026-02-08
-    goals:
-      - SwiftData sync (students, attendance, grades)
-      - Offline-first ViewModel reads with cache fallback
-      - Deep link navigation from push notifications
-      - App icon (1024x1024)
-      - SwiftLint configuration
-      - Last-synced indicator in offline banner
-      - UI tests for critical flows (9 tests)
-    stories:
-      - OFFLINE-001
-      - OFFLINE-002
-      - NAV-001
-      - STORE-001
-      - OFFLINE-003
-      - TEST-001
-
-  - number: 7
-    name: Resilience & Full Offline Coverage
-    status: complete
-    started_at: 2026-02-08
-    completed_at: 2026-02-08
-    goals:
-      - PendingAction retry with exponential backoff (max 3 retries)
-      - APIClient automatic retry for transient errors (500/502/503)
-      - Offline-first reads for timetable, messages, notifications
-      - SwiftData VersionedSchema migration support
-      - Unit tests for sync engine, offline-first, API retry (~18 new)
-      - GitHub Actions CI/CD pipeline (build + test)
-    stories:
-      - SYNC-001
-      - API-001
-      - OFFLINE-004
-      - SCHEMA-001
-      - TEST-002
-      - CI-001
-
-# Blockers
-blockers: []
-
-# Notes
-notes:
-  - "Core infrastructure (API client, auth, sync engine) already implemented"
-  - "Students and Attendance modules have file structure, need body implementation"
-  - "AUTH-006 (Session Management) should be first story - blocks all others"
-  - "Offline-first architecture requires careful sync per entity"
-  - "APNs setup requires Apple Developer account configuration"
-  - "All 8 user roles need distinct dashboard experiences"
-  - "Web app has 209+ Prisma models - iOS only needs subset for MVP"
-  - "Commands renamed from ios-* to shorter names (status, dev, qa, etc.)"
+    status: not_started

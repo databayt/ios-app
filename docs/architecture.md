@@ -1,8 +1,9 @@
 # Technical Architecture
 ## Hogwarts iOS App
 
-**Version**: 2.0
-**Last Updated**: 2026-02-08
+**Version**: 3.0
+**Last Updated**: 2026-04-26
+**Supersedes**: v2.0 (preserves layered architecture; adds horizontal cross-cutting layers and 48-epic taxonomy)
 
 ---
 
@@ -41,6 +42,46 @@
 │                  https://ed.databayt.org/api                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 1.1 Cross-Cutting Horizontal Layers (v3.0 addition)
+
+The vertical layers above (Presentation → ViewModel → Actions → APIClient/SwiftData) are crossed by **horizontal invariants** that every feature must satisfy. These are not separate layers in the dependency graph — they're code-level + tooling-level + DoD-level enforcement that runs through every story.
+
+```
+                 ┌──────────────────────────────────────────────────┐
+ every feature → │ i18n + RTL + Content Translation (F-LOCALE)      │
+ every story  →  │ Multi-Tenancy (TenantContext + schoolId)         │
+ every PR     →  │ Role-Based Access (8 roles, per-screen guard)    │
+                 │ Audit Log (every mutation)                       │
+                 │ OS Integration (EventKit, Reminders, Photos)     │
+                 │ Sharing (ShareLink, AirDrop, Handoff)            │
+                 │ Search (Spotlight, universal in-app)             │
+                 │ App Intents (Siri, Shortcuts, Focus)             │
+                 │ Privacy Manifest (PrivacyInfo.xcprivacy)         │
+                 └──────────────────────────────────────────────────┘
+```
+
+### Enforcement
+
+| Layer | Enforced by | When |
+|-------|-------------|------|
+| i18n | `scripts/audit-i18n-hardcoded.sh`, `check-string-parity.sh`, pseudo-locale | CI on every PR |
+| RTL | LocalizationDirection environment, snapshot tests in `ar` + `en` | CI |
+| Content lang | `entity.lang` field render override per card/bubble; on-demand translate banner | runtime |
+| Multi-Tenancy | `scripts/audit-tenant-scope.sh`, `TenantContext.shared` | CI + runtime |
+| RBAC | `core/auth/authorization.swift`, frontmatter `roles:`, server 403 | runtime + manual review |
+| Audit | `core/audit/audit-log.swift` writes to `AuditLog` model | runtime |
+| Privacy | `PrivacyInfo.xcprivacy` audit per release | CI + App Review |
+
+### Reference Documents
+
+- `docs/i18n.md` — i18n / RTL / content-language playbook
+- `docs/multitenancy.md` — schoolId invariants
+- `docs/roles.md` — RBAC matrix per role per epic
+- `docs/backend-gaps.md` — endpoints needed from web team
+- `.claude/rules/i18n.md`, `multitenant.md`, `roles.md`, `api-mobile.md` — path-scoped rules
 
 ---
 
