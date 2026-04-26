@@ -20,18 +20,20 @@
 
 ## P0 — Block M0
 
-### Translation (NEW)
-- 🔴 `POST /api/mobile/translate` — translate entity content to user's app language; cache in `TranslationCache`. **NEW endpoint.** File ticket: `databayt/hogwarts#translate-mobile-endpoint`.
+> **Tickets filed in `databayt/hogwarts`** — see #274–#279.
+
+### Translation (NEW) — [hogwarts#274](https://github.com/databayt/hogwarts/issues/274)
+- 🔴 `POST /api/mobile/translate` — translate entity content to user's app language; cache in `TranslationCache`. **NEW endpoint.**
   - Request: `{ entity_type, entity_id, target_lang }`
   - Response: `{ translated_text, cached, source_lang }`
 
-### Account deletion (App Store requirement)
-- 🟡 `POST /api/mobile/account/delete` — schedule + execute account deletion per Apple App Store guideline 5.1.1(v). Web has soft-delete; mobile needs hardened endpoint.
+### Account deletion (App Store requirement) — [hogwarts#275](https://github.com/databayt/hogwarts/issues/275)
+- 🔴 `POST /api/mobile/account/delete` — schedule + execute account deletion per Apple App Store guideline 5.1.1(v). 30-day grace period, cascading soft-delete.
 
-### Data export (App Store requirement)
+### Data export (App Store requirement) — [hogwarts#276](https://github.com/databayt/hogwarts/issues/276)
 - 🔴 `GET /api/mobile/account/export` — async export job that emails user a download link. **NEW**.
 
-### Consent
+### Consent — [hogwarts#277](https://github.com/databayt/hogwarts/issues/277)
 - 🔴 `GET /api/mobile/consent` — list pending legal consents (TOS, Privacy, COPPA, GDPR-K).
 - 🔴 `POST /api/mobile/consent/:id` — record acceptance with timestamp + device.
 
@@ -39,12 +41,12 @@
 
 ## P1 — Block M1
 
-### Invoices (P0 in `/api/mobile/README.md`)
+### Invoices — [hogwarts#279](https://github.com/databayt/hogwarts/issues/279) (P0 backend ticket)
 - 🔴 `GET /api/mobile/invoices` — list invoices for current user (or current child)
 - 🔴 `GET /api/mobile/invoices/:id` — invoice detail with line items
 - 🔴 `GET /api/mobile/invoices/:id/pdf` — PDF download
 
-### Payments (P0 in `/api/mobile/README.md`)
+### Payments — [hogwarts#278](https://github.com/databayt/hogwarts/issues/278) (P0 backend ticket)
 - 🔴 `POST /api/mobile/payments/process` — Stripe / Apple Pay token → Charge
 - 🔴 `GET /api/mobile/payments/transactions` — payment history
 - 🔴 `POST /api/mobile/payments/cash` — accountant records cash payment
