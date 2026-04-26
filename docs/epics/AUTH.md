@@ -16,19 +16,19 @@ Bullet-proof authentication: email/password, OAuth (Google, Apple, Facebook), bi
 
 ## Scope
 
-**In**: AUTH-005 school selection (gap), AUTH-007+ extensions including Sign in with Apple, hardened refresh, multi-school join, logout-all-devices, password change, 2FA, session restore, universal links, SSO invitation, lockout protection, demo mode.
+**In**: AUTH-005 biometric sign-in (gap fill), AUTH-007+ extensions including Sign in with Apple, hardened refresh, multi-school join, logout-all-devices, password change, 2FA, session restore, universal links, SSO invitation, lockout protection, demo mode.
 
 **Out**: First-run UX (ONBOARD), profile edit (PROFILE), settings (SETTINGS).
 
 ## Stories
 | ID | Goal | Points | Phase | Roles |
 |----|------|--------|-------|-------|
-| AUTH-001 | Welcome screen | — | done | all |
-| AUTH-002 | Login screen | — | done | all |
-| AUTH-003 | Signup flow | — | done | all |
-| AUTH-004 | Forgot password | — | done | all |
-| AUTH-005 | School selection screen (was missing) | 3 | M0 | all |
-| AUTH-006 | Biometric prompt | — | done | all |
+| AUTH-001 | Google OAuth sign-in | — | done | all |
+| AUTH-002 | Facebook OAuth sign-in | — | done | all |
+| AUTH-003 | Email/Password sign-in | — | done | all |
+| AUTH-004 | School selection (multi-tenant picker) | — | done | all |
+| AUTH-005 | Biometric sign-in (Face ID / Touch ID) — gap fill | 5 | M0 | all |
+| AUTH-006 | Session management (JWT, refresh, restore) | — | done | all |
 | AUTH-007 | Sign in with Apple (replace stubbed Apple) | 5 | M0 | all |
 | AUTH-008 | Token refresh hardening (race-safe) | 5 | M0 | all |
 | AUTH-009 | Multi-school join code flow | 5 | M0 | all |
