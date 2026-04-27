@@ -20,9 +20,9 @@
 
 ## P0 — Block M0
 
-> **Tickets filed in `databayt/hogwarts`** — see #274–#279.
+> **Tickets filed in `databayt/hogwarts`** — #274–#279 (parallel creation, numbers reflect race-order).
 
-### Translation (NEW) — [hogwarts#274](https://github.com/databayt/hogwarts/issues/274)
+### Translation (NEW) — [hogwarts#276](https://github.com/databayt/hogwarts/issues/276)
 - 🔴 `POST /api/mobile/translate` — translate entity content to user's app language; cache in `TranslationCache`. **NEW endpoint.**
   - Request: `{ entity_type, entity_id, target_lang }`
   - Response: `{ translated_text, cached, source_lang }`
@@ -30,10 +30,10 @@
 ### Account deletion (App Store requirement) — [hogwarts#275](https://github.com/databayt/hogwarts/issues/275)
 - 🔴 `POST /api/mobile/account/delete` — schedule + execute account deletion per Apple App Store guideline 5.1.1(v). 30-day grace period, cascading soft-delete.
 
-### Data export (App Store requirement) — [hogwarts#276](https://github.com/databayt/hogwarts/issues/276)
+### Data export (App Store requirement) — [hogwarts#274](https://github.com/databayt/hogwarts/issues/274)
 - 🔴 `GET /api/mobile/account/export` — async export job that emails user a download link. **NEW**.
 
-### Consent — [hogwarts#277](https://github.com/databayt/hogwarts/issues/277)
+### Consent — [hogwarts#279](https://github.com/databayt/hogwarts/issues/279)
 - 🔴 `GET /api/mobile/consent` — list pending legal consents (TOS, Privacy, COPPA, GDPR-K).
 - 🔴 `POST /api/mobile/consent/:id` — record acceptance with timestamp + device.
 
@@ -41,47 +41,50 @@
 
 ## P1 — Block M1
 
-### Invoices — [hogwarts#279](https://github.com/databayt/hogwarts/issues/279) (P0 backend ticket)
+> **Tickets filed in `databayt/hogwarts`** — #281–#288 (8 tickets covering teacher mutations, report cards, exams, admin, guardian, search).
+
+### Invoices — [hogwarts#278](https://github.com/databayt/hogwarts/issues/278) (P0 priority on backend, blocks iOS M1)
 - 🔴 `GET /api/mobile/invoices` — list invoices for current user (or current child)
 - 🔴 `GET /api/mobile/invoices/:id` — invoice detail with line items
 - 🔴 `GET /api/mobile/invoices/:id/pdf` — PDF download
 
-### Payments — [hogwarts#278](https://github.com/databayt/hogwarts/issues/278) (P0 backend ticket)
+### Payments — [hogwarts#277](https://github.com/databayt/hogwarts/issues/277) (P0 priority on backend, blocks iOS M1)
 - 🔴 `POST /api/mobile/payments/process` — Stripe / Apple Pay token → Charge
 - 🔴 `GET /api/mobile/payments/transactions` — payment history
 - 🔴 `POST /api/mobile/payments/cash` — accountant records cash payment
 - 🔴 `POST /api/mobile/payments/bank-receipt` — guardian uploads bank receipt photo
 
-### Report Cards (P1)
+### Report Cards — [hogwarts#282](https://github.com/databayt/hogwarts/issues/282)
 - 🔴 `GET /api/mobile/report-cards` — list by term
 - 🔴 `GET /api/mobile/report-cards/:id` — detail
 - 🔴 `GET /api/mobile/report-cards/:id/pdf` — PDF download
 - 🔴 `POST /api/mobile/report-cards/:id/sign` — guardian acknowledgment
 
-### Teacher mutations (P1)
-- 🔴 `POST /api/mobile/teacher/classes/:id/grades` — grade entry
-- 🔴 `POST /api/mobile/teacher/classes/:id/attendance` — attendance mark (single + bulk)
-- 🔴 `GET /api/mobile/teacher/schedule` — own teaching schedule
+### Teacher mutations
+- 🔴 `POST /api/mobile/teacher/classes/:id/grades` — grade entry — [hogwarts#281](https://github.com/databayt/hogwarts/issues/281)
+- 🔴 `POST /api/mobile/teacher/classes/:id/attendance` — attendance mark (single + bulk) — [hogwarts#283](https://github.com/databayt/hogwarts/issues/283)
+- 🔴 `GET /api/mobile/teacher/schedule` — own teaching schedule — [hogwarts#286](https://github.com/databayt/hogwarts/issues/286)
 
-### Online exams (P1)
+### Online exams — [hogwarts#285](https://github.com/databayt/hogwarts/issues/285)
 - 🔴 `POST /api/mobile/exams/:id/answers` — submit answers
 - 🔴 `GET /api/mobile/exams/:id/results` — results
 - 🔴 `POST /api/mobile/exams/:id/violations` — violation log (app-switch, screenshot)
-- 🔴 `GET /api/mobile/exams/:id/certificate` — certificate PDF
+- 🔴 `GET /api/mobile/exams/:id/certificate` — certificate PDF (P2)
 
-### Admin (P1)
+### Admin — [hogwarts#284](https://github.com/databayt/hogwarts/issues/284)
 - 🔴 `GET /api/mobile/admin/staff` — list non-teaching + teaching staff
-- 🔴 `POST /api/mobile/admin/classes` — create class
+- 🔴 `GET /api/mobile/admin/classes` — list classes
 - 🔴 `GET /api/mobile/admin/classes/:id` — class detail
 - 🔴 `POST /api/mobile/admin/classes/:id/students` — add student to class
+- 🔴 `POST /api/mobile/admin/classes` — create class (P2)
 
-### Guardian (P1)
+### Guardian — [hogwarts#287](https://github.com/databayt/hogwarts/issues/287)
 - 🔴 `POST /api/mobile/guardian/excuse` — submit attendance excuse
 - 🔴 `POST /api/mobile/guardian/absence-intention` — pre-notification of absence
 - 🔴 `GET /api/mobile/guardian/consent` — pending consents per child
 - 🔴 `POST /api/mobile/guardian/consent/:id` — sign
 
-### Search (NEW)
+### Search (NEW) — [hogwarts#288](https://github.com/databayt/hogwarts/issues/288)
 - 🔴 `GET /api/mobile/search?q=...&types=...` — universal scoped search
 
 ---
