@@ -1,432 +1,238 @@
 # Product Requirements Document (PRD)
-## Hogwarts iOS App
+## Hogwarts iOS — v3.0
 
-**Version**: 2.0
-**Last Updated**: 2026-02-08
+**Version**: 3.0
+**Last Updated**: 2026-04-26
+**Supersedes**: v2.0
 **Status**: Approved
 
 ---
 
 ## 1. Executive Summary
 
-### 1.1 Product Vision
-Hogwarts iOS is the native mobile companion for the Hogwarts school management platform. It provides offline-first access to critical school features for students, teachers, parents, and staff.
+### 1.1 Vision
+Hogwarts iOS is the native mobile companion for the multi-tenant Hogwarts school management platform. It serves all 8 user roles (DEVELOPER, ADMIN, TEACHER, STUDENT, GUARDIAN, ACCOUNTANT, STAFF, USER) with offline-first capability, full Arabic-default RTL/i18n with on-demand content translation, strict multi-tenant isolation, and Apple-platform-native delights (Widgets, Live Activities, App Intents, VisionKit, Apple Watch).
 
-### 1.2 Goals
-- **G1**: Enable mobile access to school information for all 8 user roles
-- **G2**: Provide offline-first functionality for areas with poor connectivity
-- **G3**: Support bilingual usage (Arabic RTL + English LTR)
-- **G4**: Integrate seamlessly with existing Hogwarts web platform
-- **G5**: Mirror web app feature patterns for consistent data experience
+### 1.2 Cross-Cutting Invariants (Non-Negotiable)
 
-### 1.3 Success Metrics
+| Invariant | Doc | Enforcement |
+|-----------|-----|-------------|
+| **i18n & RTL** | `i18n.md` | `scripts/audit-i18n-hardcoded.sh`, `check-string-parity.sh`, pseudo-locale CI |
+| **Multi-Tenancy** | `multitenancy.md` | `scripts/audit-tenant-scope.sh` |
+| **All 8 Roles** | `roles.md` | Per-story frontmatter `roles:` declaration |
+| **Content Translation** | `i18n.md` §"Content-Language Translation" | Per-entity `lang` field render + on-demand translate banner |
+| **API Contract** | `.claude/rules/api-mobile.md` | All endpoints under `/api/mobile/*`, snake_case, JWT |
+
+### 1.3 Goals
+- **G1**: Mobile access to school information for all 8 user roles, with feature parity to kotlin-app v2
+- **G2**: Offline-first; all reads work without network; writes queue and retry
+- **G3**: Bilingual Arabic-default + English; full RTL; ≥99% string parity
+- **G4**: Database content translation respecting entity `lang` field (announcements, messages, assignments)
+- **G5**: Strict multi-tenant isolation — `schoolId` scoping on every query, audit log on every mutation
+- **G6**: Apple-platform-native — Widgets, Live Activities, App Intents, VisionKit, eventually Watch
+- **G7**: App Store compliance — privacy manifest, account deletion, parental consent, data export
+
+### 1.4 Success Metrics
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
 | App Store Rating | 4.5+ | App Store Connect |
-| Crash-Free Rate | 99.5%+ | Xcode Organizer / Sentry |
+| Crash-Free Rate | 99.5%+ | Sentry / Xcode Organizer |
 | Daily Active Users | 60% of web users | Analytics |
-| Offline Usage | 30%+ sessions | Local analytics |
-| App Launch Time | < 2 seconds | Performance profiling |
-| Attendance Marking Time | < 30 seconds per class | User testing |
-| Sync Success Rate | 95%+ | Sync engine metrics |
-| Test Coverage | 80%+ | Xcode coverage report |
+| Cold Launch Time | ≤ 1.5 s | XCTMetric, MetricKit |
+| Frame Rate | 60 fps everywhere, 120 Hz on supported devices | Instruments |
+| Memory | avg ≤150 MB, max ≤300 MB | Instruments |
+| Battery | ≤ 3% per active hour | MetricKit |
+| Offline Sessions | 30%+ | Custom analytics |
+| Sync Success | 95%+ | Sync engine metrics |
+| Test Coverage | 80%+ on services + viewmodels | Xcode coverage |
+| AR/EN String Parity | ≥ 99% | `check-string-parity.sh` |
+| Multi-Tenant Isolation | 100% (no leaks) | Integration tests |
+| App Store Review | First-attempt accept | App Review Board |
 
 ---
 
-## 2. User Personas
+## 2. User Personas (per Role)
 
-### 2.1 Student (Primary)
-- **Age**: 6-18 years
-- **Needs**: View grades, schedule, assignments, attendance
-- **Pain Points**: Slow school wifi, Arabic interface needed
-- **Goals**: Quick access to daily information
-- **Key Journeys**: Check schedule, view grades, see attendance record
+### Pilot Roles (M0)
+- **STUDENT** (6–18) — own timetable, attendance history, grades, assignments, fees, messages, ID, announcements
+- **GUARDIAN** — multi-child selector, per-child views, excuse submit, fee pay, consent forms, meeting bookings
+- **TEACHER** — classes, schedule, attendance marking (single/bulk/QR/NFC/kiosk), grading, lesson plans, messages, hall passes
+- **ADMIN** — school dashboard, students CRUD, staff, classes, announcements authoring, KPIs, settings
 
-### 2.2 Teacher
-- **Role**: Classroom instructor
-- **Needs**: Mark attendance, enter grades, communicate with parents
-- **Pain Points**: Time-consuming manual processes, need offline marking
-- **Goals**: Efficient classroom management from phone
-- **Key Journeys**: Take attendance (< 30s), enter grades, message parent
+### Near-Term Roles (M1)
+- **ACCOUNTANT** — finance dashboard, fees, invoices, payments, refunds, scholarships, reports
 
-### 2.3 Guardian (Parent)
-- **Role**: Student's parent/guardian
-- **Needs**: Monitor child's progress, communicate with teachers
-- **Pain Points**: Lack of real-time information, multiple children
-- **Goals**: Stay informed about child's education
-- **Key Journeys**: Check child's attendance, view report card, message teacher
+### Later Roles (M2)
+- **STAFF** — non-teaching staff schedule, payroll slip, leave, notices
+- **USER** — pre-school applicant; multi-step admission flow; OTP status check
 
-### 2.4 Admin
-- **Role**: School administrator
-- **Needs**: Overview of school operations, manage students
-- **Pain Points**: Managing multiple systems, need mobile access
-- **Goals**: Centralized school management on the go
-- **Key Journeys**: View school stats, manage students, handle approvals
+### Out of Scope
+- **DEVELOPER** — platform admin (databayt staff). Web only. iOS detects + redirects.
+
+For full role-feature matrix see `roles.md`.
 
 ---
 
-## 3. Features
+## 3. Epic Taxonomy (48 epics)
 
-### 3.1 Epic 1: Authentication (EPIC-001)
-**Priority**: P0 (Critical)
-**Sprint**: 1
+Stories are kept in `docs/stories/<EPIC>-<NUM>-<slug>.md`. Each epic has its own page in `docs/epics/<EPIC>.md`. Plan-level breakdown:
 
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| AUTH-001 | Google OAuth | Sign in with Google account | All |
-| AUTH-002 | Facebook OAuth | Sign in with Facebook account | All |
-| AUTH-003 | Email/Password | Traditional credential login | All |
-| AUTH-004 | School Selection | Multi-tenant school picker after login | All |
-| AUTH-005 | Biometric Unlock | Face ID / Touch ID for returning users | All |
-| AUTH-006 | Session Management | JWT handling, refresh, expiry | All |
+### 3.1 Foundation Layer (12 epics)
 
-**Acceptance Criteria**:
-- User can sign in via Google, Facebook, or email/password
-- After auth, user selects school (multi-tenant)
-- JWT stored securely in Keychain
-- Session persists across app restarts
-- Biometric unlock for returning users (opt-in)
-- Graceful handling of expired tokens (auto-refresh or re-login)
+| Code | Title | Phase |
+|------|-------|-------|
+| F-CORE | Core Infrastructure (APIClient, TenantContext, audit, telemetry) | M0 |
+| F-DESIGN | Design System & Atoms (tokens, atoms, Liquid Glass, Dynamic Type) | M0 |
+| F-LOCALE | i18n & RTL & Content Translation | M0 |
+| F-OFFLINE | Offline-First Data Layer (SwiftData, sync engine v2) | M0 |
+| F-PUSH | Push Notifications (APNs, deep-links, rich, silent, NSE) | M0 |
+| F-MEDIA | Media & Files (pickers, cache, video, voice, PDF, upload manager) | M0/M1 |
+| F-INTEGRATION | OS Integration (EventKit, Reminders, Photos, Files, Contacts) | M0/M1 |
+| F-SHARING | Share Sheet, AirDrop, Handoff | M0/M1 |
+| F-SEARCH | Spotlight + universal search | M1 |
+| F-INTENTS | App Intents, Siri, Shortcuts, Focus Filter, Action Button | M0/M1 |
+| F-PLATFORM-CORE | Widgets, Live Activities, iPad split | M1 |
+| F-PLATFORM-EXTENDED | Watch, Catalyst, visionOS | M2 |
 
-**Offline Behavior**: Login requires connectivity. Cached session allows app use offline.
+### 3.2 Identity & Onboarding (4 epics)
 
-### 3.2 Epic 2: Dashboard (EPIC-002)
-**Priority**: P0 (Critical)
-**Sprint**: 1-2
+| Code | Title | Phase |
+|------|-------|-------|
+| AUTH | Authentication (extends existing AUTH-001..006) | M0 |
+| ONBOARD | First-Run Experience | M0 |
+| PROFILE | User Profile | M0 |
+| SETTINGS | App Settings (incl. App-Store-blocking export + delete) | M0 |
 
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| DASH-001 | Student Dashboard | Today's schedule, recent grades, attendance summary | Student |
-| DASH-002 | Teacher Dashboard | Today's classes, pending attendance, notifications | Teacher |
-| DASH-003 | Guardian Dashboard | Children overview, alerts, recent activity | Guardian |
-| DASH-004 | Admin Dashboard | School metrics, recent activity, quick actions | Admin, Developer |
+### 3.3 Role Surfaces (2 epics)
 
-**Acceptance Criteria**:
-- Each role sees a tailored dashboard on login
-- Dashboard loads within 2 seconds
-- Shows today's relevant information prominently
-- Quick action buttons for common tasks
-- Pull-to-refresh updates data
-- Works offline with cached data (shows "last updated" timestamp)
+| Code | Title | Phase |
+|------|-------|-------|
+| HOME | Springboard Home (extends existing) | M0 |
+| DASHBOARD | Role-aware Dashboard (one epic, 6 role-tracks) | M0 |
 
-**Offline Behavior**: Shows cached dashboard data with "Last updated: X" banner.
+### 3.4 Modules (24 epics)
 
-### 3.3 Epic 3: Attendance (EPIC-003)
-**Priority**: P0 (Critical)
-**Sprint**: 2
+| Code | Title | Phase |
+|------|-------|-------|
+| TIMETABLE | Schedule & Calendar | M0 |
+| ATTENDANCE | Student history + Teacher mark (QR/NFC/kiosk/beacon) | M0/M1 |
+| GRADES | Grades & GPA | M0/M1 |
+| REPORTCARD | Report Cards | M1 |
+| EXAMS | Exams & Quizzes (online taking, lockdown) | M1 |
+| ASSIGNMENTS | Assignments & Submissions | M1 |
+| MESSAGING | WhatsApp-style chat (real-time, offline queue) | M0 |
+| ANNOUNCE | Announcements (read + author, content lang picker) | M0 |
+| NOTIF | Notifications (in-app, prefs, quiet hours) | M0 |
+| FEES | Fees + Payments (Apple Pay, Stripe, cash, bank) | M0/M1 |
+| EVENTS | School Events | M1 |
+| LIBRARY | Library Catalog | M2 |
+| SUBJECTS | Subjects Catalog | M1 |
+| STREAM | LMS Course Stream | M2 |
+| QUIZ | Quiz Game | M2 |
+| IDCARD | Digital ID + Wallet pass | M1/M2 |
+| GUARDIAN-LINK | Multi-child linkage + selector + consent + meetings | M0/M2 |
+| SUBSTITUTION | Teacher absence + cover workflow | M2 |
+| WELLBEING | Health, Discipline, Achievements, Counselor | M2 |
+| AI-DOC | AI Document Processing (VisionKit + backend job) | M2 |
+| SUBSCRIPTION-SAAS | School-level Hogwarts SaaS billing (StoreKit 2) | M2 |
+| ADMISSION | Public applicant flow | M2 |
+| TRANSPORT | Bus & Live Tracking | M2 |
+| GOV | **App Store Blocker** — Consent, Export, Deletion, ATT, Privacy Manifest | M0 |
 
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| ATT-001 | View History | Personal attendance record with stats | Student, Guardian |
-| ATT-002 | Mark Attendance | Take class attendance (manual) | Teacher |
-| ATT-003 | QR Check-in | Scan QR code for attendance | Student |
-| ATT-004 | Submit Excuse | Request absence excuse with reason | Guardian |
-| ATT-005 | Attendance Stats | Analytics charts and summaries | Teacher, Admin |
-| ATT-006 | Bulk Attendance | Mark multiple students at once | Teacher |
+### 3.5 Quality & Ship (6 epics)
 
-**Acceptance Criteria (ATT-002 - Mark Attendance)**:
-- Given a teacher views their current class
-- When they tap "Take Attendance"
-- Then they see a list of all students in the class
-- And can mark each as Present/Absent/Late/Excused
-- And can submit attendance (queued if offline)
-- And attendance syncs when connectivity returns
-
-**Sub-features from Web App**:
-- Attendance statuses: PRESENT, ABSENT, LATE, EXCUSED, SICK, HOLIDAY
-- Attendance methods: MANUAL, QR_CODE (more in future)
-- Excuse workflow: Guardian submits -> Teacher/Admin approves
-- Statistics: Per-student, per-class, per-day aggregations
-
-**Offline Behavior**: View cached history offline. Mark attendance offline (queued). Sync on reconnect.
-
-### 3.4 Epic 4: Grades & Results (EPIC-004)
-**Priority**: P0 (Critical)
-**Sprint**: 2
-
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| GRADE-001 | View Results | Individual exam/assignment results | Student, Guardian |
-| GRADE-002 | Report Card | Term/year summary with all subjects | Student, Guardian |
-| GRADE-003 | Grade History | Historical performance charts | Student, Guardian |
-| GRADE-004 | Grade Entry | Enter student grades for exams | Teacher |
-| GRADE-005 | GPA Display | Calculated GPA with breakdown | Student |
-
-**Acceptance Criteria (GRADE-001 - View Results)**:
-- Given a student opens the Grades tab
-- When results are available
-- Then they see a list of exams/assignments with scores
-- And each result shows subject, date, score, grade letter
-- And results are color-coded (green for pass, red for fail)
-
-**Sub-features from Web App**:
-- Grading systems: Percentage, Letter Grade, GPA
-- Grade boundaries configurable per school
-- Report card generation per term
-- Grade override capability (admin only)
-
-**Offline Behavior**: View cached grades offline. Grade entry queued offline.
-
-### 3.5 Epic 5: Timetable (EPIC-005)
-**Priority**: P1 (High)
-**Sprint**: 3
-
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| TIME-001 | Weekly View | 7-day schedule grid | All |
-| TIME-002 | Daily View | Single day timeline | All |
-| TIME-003 | Class Details | Room, teacher, subject info | Student |
-
-**Offline Behavior**: Full offline access (cached for 1 week).
-
-### 3.6 Epic 6: Messaging (EPIC-006)
-**Priority**: P1 (High)
-**Sprint**: 3
-
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| MSG-001 | Conversation List | List of all chats | All |
-| MSG-002 | Chat Interface | Send/receive messages | All |
-| MSG-003 | Send/Receive | Real-time messaging | All |
-| MSG-004 | Push Notifications | Message alerts via APNs | All |
-
-**Offline Behavior**: View cached messages offline. Send queued offline.
-
-### 3.7 Epic 7: Notifications (EPIC-007)
-**Priority**: P1 (High)
-**Sprint**: 3
-
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| NOTIF-001 | Notification List | All notifications | All |
-| NOTIF-002 | Push Alerts | Real-time push via APNs | All |
-| NOTIF-003 | Preferences | Notification settings per type | All |
-
-### 3.8 Epic 8: Students Management (EPIC-008)
-**Priority**: P0 (Critical)
-**Sprint**: 2
-
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| STU-001 | Student List | Searchable, filterable student list | Teacher, Admin |
-| STU-002 | Student Detail | Full student profile view | Teacher, Admin |
-| STU-003 | Create/Edit Student | Add or update student information | Admin |
-
-**Acceptance Criteria (STU-001 - Student List)**:
-- Given a teacher opens the Students tab
-- When the list loads
-- Then they see all students in their school (scoped by schoolId)
-- And can search by name
-- And can filter by class, year level, status
-- And each row shows name, class, year level, status badge
-
-**Sub-features from Web App**:
-- Student statuses: ACTIVE, INACTIVE, GRADUATED, TRANSFERRED, SUSPENDED
-- Search across given name and surname
-- Pagination (20 per page)
-- Sorting by name, class, date enrolled
-- Guardian linkage display
-
-**Offline Behavior**: View cached student list offline. Create/edit queued offline.
-
-### 3.9 Epic 9: Profile & Settings (EPIC-009)
-**Priority**: P2 (Medium)
-**Sprint**: 4
-
-| Story ID | Feature | Description | User Roles |
-|----------|---------|-------------|------------|
-| PROF-001 | Profile View | Personal information display | All |
-| PROF-002 | Edit Profile | Update name, phone, photo | All |
-| PROF-003 | Language Toggle | Arabic/English switch | All |
-| PROF-004 | Notification Settings | Per-type preferences | All |
-| PROF-005 | Theme Settings | Light/Dark mode | All |
-| PROF-006 | Logout | Sign out and clear session | All |
+| Code | Title | Phase |
+|------|-------|-------|
+| Q-TEST | Test Infrastructure (Swift Testing + XCTest + snapshots + E2E) | M0/M1 |
+| Q-A11Y | Accessibility (VoiceOver, Dynamic Type, Reduce Motion) | M0 |
+| Q-PERF | Performance (launch, fps, memory, battery) | M1 |
+| Q-SECURITY | Security (cert pinning, OWASP MASVS L1) | M1 |
+| OBS | Observability (Sentry, MetricKit, in-app feedback) | M0/M1 |
+| SHIP | Release & TestFlight | M0/M1 |
 
 ---
 
-## 4. Role-Based Capabilities Matrix
+## 4. Phasing
 
-| Feature | DEVELOPER | ADMIN | TEACHER | STUDENT | GUARDIAN | STAFF | ACCOUNTANT |
-|---------|-----------|-------|---------|---------|----------|-------|------------|
-| Dashboard | Admin view | Admin view | Teacher view | Student view | Guardian view | Staff view | Finance view |
-| Students: View All | Y | Y | Own classes | N | Own children | Y | N |
-| Students: Create | Y | Y | Y | N | N | N | N |
-| Students: Edit | Y | Y | Own school | N | N | N | N |
-| Students: Delete | Y | Y | N | N | N | N | N |
-| Attendance: Mark | Y | Y | Y | N | N | N | N |
-| Attendance: View Own | - | - | - | Y | Children | - | - |
-| Attendance: View All | Y | Y | Own classes | N | N | Y | N |
-| Grades: Enter | Y | Y | Y | N | N | N | N |
-| Grades: View Own | - | - | - | Y | Children | - | - |
-| Grades: View All | Y | Y | Own classes | N | N | N | N |
-| Messages: Send | Y | Y | Y | Y | Y | Y | N |
-| Settings: School | Y | Y | N | N | N | N | N |
+### M0 — Pilot Bring-up (10–14 weeks): Student + Guardian + Teacher read-only
+**Goal**: TestFlight private beta with student/guardian/teacher seeing real data from demo school in both AR and EN, with full RTL, push notifications, offline reads, governance/consent flows.
+
+In-scope: F-CORE, F-DESIGN, F-LOCALE (1-9, 11), F-OFFLINE, F-PUSH (1-5), F-MEDIA (1, 7), F-INTEGRATION (1, 5), F-SHARING (1), AUTH (extend), ONBOARD, PROFILE, SETTINGS, HOME, DASHBOARD (S/G/T tracks), TIMETABLE (1-4, 6), ATTENDANCE (student-side 1-2 only), GRADES (1-3, 5), MESSAGING (text + read receipt + archive + mute + offline + socket), ANNOUNCE (reader), NOTIF (1-5), FEES (view-only), GUARDIAN-LINK (1-3), GOV (all M0), Q-A11Y (1-7), Q-TEST (M0), OBS (1-2, 6), SHIP (1-5, 7).
+
+### M1 — Pilot Pro (8–12 weeks): Teacher MVP + Payments + Widgets
+Adds teacher mark-attendance, grade entry, fees+payments via Apple Pay, widgets + live activities, exams + assignments + report cards, search, intents.
+
+### M2 — Expansion + Watch (12–16 weeks)
+Adds LIB, SUB, STREAM, QUIZ, IDCARD wallet, ADMISSION, TRANSPORT, AI-DOC, WELLBEING, SUBSTITUTION, SUBSCRIPTION-SAAS, Watch + Catalyst, full Q-* sweep.
 
 ---
 
-## 5. Technical Requirements
+## 5. Backend Coordination
 
-### 5.1 Platform Requirements
-- **iOS Version**: 18.0+
-- **Devices**: iPhone (iPad future)
-- **Languages**: Swift 6.0+
-- **UI Framework**: SwiftUI
+Mobile depends on `/api/mobile/*` endpoints from `databayt/hogwarts`. Gaps tracked in `docs/backend-gaps.md`. P0 gaps blocking M1:
+- `POST /api/mobile/translate` (NEW) — content translation cache
+- `POST /api/mobile/account/delete`, `GET /api/mobile/account/export` — App Store
+- `GET/POST /api/mobile/consent/*` — legal consent
+- `GET /api/mobile/invoices/*`, `POST /api/mobile/payments/*` — fees+payments
 
-### 5.2 Architecture Requirements
-- **Pattern**: MVVM + Feature-Based
-- **Storage**: SwiftData for offline
-- **Network**: URLSession with async/await
-- **Auth**: Keychain for secure storage
+P1 gaps blocking M1 expansion: report cards PDF, teacher mutations (grade entry, attendance mark), online exam answers/results, admin staff/classes endpoints, guardian excuse/intention/consent endpoints, search endpoint.
 
-### 5.3 Backend Integration
-- **API**: Hogwarts Next.js API (`https://ed.databayt.org/api`)
-- **Auth**: NextAuth.js compatible (JWT)
-- **Multi-tenant**: schoolId scoping in every request
-- **Push**: APNs (Apple Push Notification service)
-
-### 5.4 Offline Requirements
-
-| Feature | Read (Offline) | Write (Offline) | Sync Strategy |
-|---------|---------------|-----------------|---------------|
-| Dashboard | Cached data | N/A | App launch |
-| Students | Cached list | Queue create/edit | 1 hour cache |
-| Attendance | Cached history | Queue marking | 24 hour cache |
-| Grades | Cached results | Queue entry | 24 hour cache |
-| Timetable | Full offline | N/A | 1 week cache |
-| Messages | Cached messages | Queue send | Real-time |
-| Profile | Cached profile | Queue edits | Indefinite |
-
-### 5.5 API Contract
-
-All API requests follow the pattern:
-```
-Authorization: Bearer {jwt_token}
-Content-Type: application/json
-
-// Response format
-{
-  "success": true,
-  "data": { ... }
-}
-
-// Error format
-{
-  "success": false,
-  "error": "Error message"
-}
-```
-
-### 5.6 Security Requirements
-- JWT tokens stored in Keychain (not UserDefaults)
-- Biometric authentication option (Face ID / Touch ID)
-- Session timeout (24 hours)
-- Certificate pinning (production)
-- No sensitive data in logs or crash reports
-- Secure input fields for passwords
+P2 gaps blocking M2: library, subjects/lessons, stream LMS, quiz, ID card wallet pass, transport, AI-DOC jobs, subscription, substitution, wellbeing, admission applicant.
 
 ---
 
-## 6. User Journeys
+## 6. RBAC Matrix
 
-### 6.1 Student: Check Today's Schedule
-1. Open app (biometric unlock)
-2. View dashboard with today's classes
-3. Tap class for details (room, teacher, time)
+See `docs/roles.md` for the full feature × role matrix. Summary:
 
-### 6.2 Teacher: Take Attendance
-1. Open app
-2. Dashboard shows "Take Attendance" for current class
-3. Tap to open attendance form
-4. Mark students present/absent/late (< 30 seconds)
-5. Submit (queued if offline, syncs when connected)
-
-### 6.3 Guardian: View Child's Grades
-1. Open app
-2. Select child (if multiple children)
-3. View grades dashboard with recent results
-4. Tap subject for detailed grade history
-
-### 6.4 Admin: Manage Students
-1. Open app
-2. Navigate to Students
-3. Search/filter student list
-4. Tap student for detail view
-5. Edit student information if needed
+| Cluster | DEV | ADM | TCH | STU | GRD | ACC | STF | USR |
+|---------|-----|-----|-----|-----|-----|-----|-----|-----|
+| Auth + Profile + Settings | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Messaging + Announcements + Notifications | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| Timetable + Subjects | — | ✓ | ✓ | ✓ | ✓(child) | — | ✓ | — |
+| Attendance (own/child) | — | — | — | ✓ | ✓ | — | — | — |
+| Attendance (mark) | — | ✓ | ✓ | — | — | — | — | — |
+| Grades + Report Cards (own/child) | — | ✓ | ✓ | ✓ | ✓(child) | — | — | — |
+| Grade entry | — | — | ✓ | — | — | — | — | — |
+| Exams + Assignments (own) | — | — | — | ✓ | — | — | — | — |
+| Exams + Assignments (author/grade) | — | — | ✓ | — | — | — | — | — |
+| Fees (view) | — | ✓ | — | ✓ | ✓(child) | ✓ | — | — |
+| Fees (pay) | — | — | — | — | ✓ | — | — | — |
+| Fees (record cash + refund) | — | ✓ | — | — | — | ✓ | — | — |
+| Events RSVP | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| ID card | — | ✓ | ✓ | ✓ | — | ✓ | ✓ | — |
+| Children list + multi-child | — | — | — | — | ✓ | — | — | — |
+| Admin functions | — | ✓ | — | — | — | — | — | — |
+| Admission apply | — | — | — | — | — | — | — | ✓ |
 
 ---
 
-## 7. Design Guidelines
+## 7. Definition of Done (Release Level)
 
-### 7.1 Visual Design
-- Follow Apple Human Interface Guidelines
-- Consistent with Hogwarts web branding
-- Support light and dark modes
-- Accessible color contrast (WCAG AA)
-
-### 7.2 Navigation
-- Tab bar for main sections (role-dependent tabs)
-- NavigationStack for drill-down
-- Pull-to-refresh for all lists
-- Swipe gestures where appropriate
-
-### 7.3 Accessibility
-- VoiceOver support on all screens
-- Dynamic Type support (no hardcoded font sizes)
-- Sufficient touch targets (44pt minimum)
-- Screen reader labels on all interactive elements
+Before TestFlight public:
+- [ ] All M0 stories merged
+- [ ] All M0 epics' DoD checklists green
+- [ ] App Store Review accepted on first attempt
+- [ ] All 8 roles login successfully (3 — DEV, STAFF, USER — may show role-mismatch redirect; that's accepted)
+- [ ] Arabic + English fully parity-checked
+- [ ] Multi-tenant isolation tests green
+- [ ] Privacy manifest accurate per actual data use
+- [ ] Account deletion + data export flows tested
+- [ ] Push notifications working on real device (APNs production)
+- [ ] Sentry receiving production events
+- [ ] CI green: lint + typecheck + tests + i18n + tenant gates
 
 ---
 
-## 8. Release Plan
+## 8. Reference
 
-### 8.1 MVP (v1.0) - Sprints 1-5
-- Authentication (all methods)
-- Dashboard (all roles)
-- Attendance (view + mark + QR)
-- Grades (view + report card)
-- Students (list + detail + CRUD)
-- Timetable (view)
-- Basic messaging
-- Push notifications
-- Profile/Settings
-
-### 8.2 Future Releases (v1.x)
-- Assignments management
-- Fee payment integration
-- Library system
-- Event calendar
-- Document uploads
-- Kiosk mode for attendance
-- Geofencing attendance
-- Advanced analytics
-
----
-
-## 9. Risks & Mitigations
-
-| Risk | Impact | Probability | Mitigation |
-|------|--------|-------------|------------|
-| API compatibility | High | Medium | Version API endpoints, feature flags |
-| Offline sync conflicts | Medium | High | Clear conflict resolution per entity |
-| RTL layout issues | Medium | Medium | Thorough RTL testing, SwiftUI handles most |
-| Push notification delivery | Medium | Low | APNs best practices, silent push fallback |
-| App Store rejection | High | Low | Follow HIG strictly, no private APIs |
-| Performance on older devices | Medium | Medium | Profile on iPhone SE, lazy loading |
-
----
-
-## 10. Appendix
-
-### 10.1 Glossary
-- **schoolId**: Unique tenant identifier for multi-tenant isolation
-- **JWT**: JSON Web Token for authentication
-- **RTL**: Right-to-left (Arabic layout direction)
-- **SwiftData**: Apple's persistence framework (iOS 18+)
-- **APNs**: Apple Push Notification service
-
-### 10.2 References
-- [Hogwarts Web App](https://ed.databayt.org)
-- [Web Codebase](/Users/abdout/hogwarts/)
-- [Apple HIG](https://developer.apple.com/design/human-interface-guidelines/)
-- [SwiftUI Documentation](https://developer.apple.com/documentation/swiftui)
+- Architecture: `docs/architecture.md`
+- Cross-cutting playbooks: `docs/i18n.md`, `multitenancy.md`, `roles.md`
+- Backend gaps: `docs/backend-gaps.md`
+- Story template: `docs/STORY-TEMPLATE.md`
+- BMAD workflow: `docs/bmad-workflow-status.yaml`
+- Design system: `docs/apple-design-guidelines.md`
+- TestFlight: `docs/testflight-distribution.md`
+- Web mobile API: `/Users/abdout/hogwarts/src/app/api/mobile/README.md`
+- Android reference: `/Users/abdout/kotlin-app/`

@@ -100,9 +100,10 @@ struct SingleStudentForm: View {
                 // Date display
                 HStack {
                     Text(String(localized: "attendance.form.date"))
+                        .foregroundStyle(.secondary)
                     Spacer()
                     Text(date, style: .date)
-                        .foregroundStyle(.secondary)
+                        .fontWeight(.medium)
                 }
 
                 // Status picker
@@ -143,6 +144,9 @@ struct SingleStudentForm: View {
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(.ultraThinMaterial)
     }
 }
 
@@ -403,6 +407,9 @@ struct ExcuseFormView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(.ultraThinMaterial)
             .navigationTitle(String(localized: "attendance.excuse.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -541,6 +548,9 @@ struct ExcuseReviewForm: View {
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(.ultraThinMaterial)
     }
 
     private func reviewExcuse(approved: Bool) {

@@ -1,0 +1,59 @@
+name: i18n + Multi-Tenant Gates
+
+on:
+  pull_request:
+    paths:
+      - 'hogwarts/**/*.swift'
+      - 'hogwarts/resources/Localizable.xcstrings'
+      - 'scripts/check-string-parity.sh'
+      - 'scripts/audit-tenant-scope.sh'
+      - 'scripts/audit-i18n-hardcoded.sh'
+  push:
+    branches: [main]
+
+jobs:
+  string-parity:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: brew install jq
+
+      - name: Check EN/AR string parity (≥99%)
+        run: |
+          chmod +x scripts/check-string-parity.sh
+          THRESHOLD=0.99 scripts/check-string-parity.sh
+
+  hardcoded-strings:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit hardcoded UI strings
+        run: |
+          chmod +x scripts/audit-i18n-hardcoded.sh
+          scripts/audit-i18n-hardcoded.sh
+
+  tenant-scope:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit FetchDescriptor schoolId scoping
+        run: |
+          chmod +x scripts/audit-tenant-scope.sh
+          scripts/audit-tenant-scope.sh
+
+  rtl-snapshot-check:
+    runs-on: macos-15
+    if: contains(github.event.pull_request.changed_files, 'hogwarts/features')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify RTL snapshots exist for changed views
+        run: |
+          # Heuristic: every modified feature/views/*-view.swift must have at
+          # least one snapshot in HogwartsTests/snapshots/<feature>/ in both ar and en
+          # (skip if no snapshot infrastructure yet — warn only)
+          echo "RTL snapshot check (warn-only until snapshot infrastructure lands)"

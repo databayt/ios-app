@@ -160,8 +160,21 @@ struct DayTimelineRow: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(
+                .thinMaterial,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(.quaternary, lineWidth: 0.5)
+            }
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = entry.displayName
+                } label: {
+                    Label(String(localized: "common.copy"), systemImage: "doc.on.doc")
+                }
+            }
         }
         .accessibilityElement(children: .combine)
     }

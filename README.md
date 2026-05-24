@@ -121,10 +121,50 @@ xcodebuild test -scheme HogwartsUITests
 
 **Target**: 80%+ code coverage
 
+## Design Language
+
+The app uses Apple's native design language with iOS 26 aesthetic:
+
+- **Liquid Glass** - glassmorphism with frosted background materials
+- **Continuous Corners** - squircle shapes (RoundedRectangle style: .continuous)
+- **Native Materials** - .ultraThinMaterial, .thinMaterial, .regularMaterial
+- **SF Symbols** - hierarchical rendering for consistent icons
+- **Context Menus** - long-press actions on interactive elements
+- **Inset Grouped Lists** - native iOS form styling
+- **Standardized Shadows** - consistent elevation system
+
+The design system is documented in [Apple Design Guidelines](docs/apple-design-guidelines.md).
+
+## TestFlight Distribution
+
+Distribute beta builds to testers via Apple's TestFlight service:
+
+### Quick Start
+
+```bash
+# Archive for TestFlight (requires Apple Developer account + Team ID)
+./scripts/archive-for-testflight.sh YOUR_TEAM_ID
+
+# Build artifacts:
+# - build/Hogwarts.xcarchive (archive)
+# - build/Hogwarts.ipa (app binary)
+```
+
+See [TestFlight Distribution Guide](docs/testflight-distribution.md) for complete setup instructions.
+
+### Prerequisites
+
+- Apple Developer Account ($99/year)
+- Team ID from developer.apple.com
+- App record in App Store Connect
+- Provisioning profiles configured
+
 ## Documentation
 
 - [PRD](docs/prd.md) - Product requirements
 - [Architecture](docs/architecture.md) - Technical design
+- [Apple Design Guidelines](docs/apple-design-guidelines.md) - Design system (Liquid Glass, materials, spacing)
+- [TestFlight Distribution](docs/testflight-distribution.md) - Beta testing setup
 - [Workflow Status](docs/bmad-workflow-status.yaml) - BMAD tracking
 
 ## Related
