@@ -64,15 +64,6 @@ jobs:
           brew list xcbeautify >/dev/null 2>&1 || brew install xcbeautify
           xcodegen generate
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Download iOS 18 simulator runtime
-        run: xcodebuild -downloadPlatform iOS
-
       - name: Build
         run: |
           set -o pipefail
