@@ -31,6 +31,7 @@ TestFlight setup, App Store assets in EN+AR, privacy manifest, export compliance
 | SHIP-006 | Phased release rollout strategy | 2 | M1 | all |
 | SHIP-007 | App Review submission + appeal playbook | 3 | M0 | all |
 | SHIP-008 | Marketing site + App Store optimization | 5 | M1 | all |
+| SHIP-009 | Fastlane + GitHub Actions TestFlight pipeline | 3 | M0 | all |
 
 ## Cross-cutting checks
 - [ ] Screenshots captured in both AR + EN
@@ -38,6 +39,7 @@ TestFlight setup, App Store assets in EN+AR, privacy manifest, export compliance
 - [ ] Privacy manifest accurate per actual data use
 - [ ] Release notes localized
 - [ ] Phased rollout starts at 1% → 10% → 50% → 100%
+- [ ] TestFlight uploads are reproducible (Fastlane lane, no manual Xcode Organizer steps)
 
 ## Backend dependencies
 None — all release ops.
