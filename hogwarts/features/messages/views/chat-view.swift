@@ -4,6 +4,18 @@ import SwiftUI
 /// Mirrors: src/components/platform/messages/chat-view.tsx
 struct ChatView: View {
     let conversation: Conversation
+    private let conversationActions = ConversationActionsService()
+
+    /// Thin wrapper so menu buttons don't repeat the do/try/catch boilerplate.
+    /// Errors are swallowed — the operation is optimistic and a background
+    /// refresh on next list appearance pulls authoritative state.
+    private func conversationAction(_ op: @escaping (ConversationActionsService) async throws -> Void) async {
+        do {
+            try await op(conversationActions)
+        } catch {
+            // Silent fail — list view re-fetches on appear.
+        }
+    }
 
     @Environment(AuthManager.self) private var authManager
     @Environment(TenantContext.self) private var tenantContext
@@ -90,6 +102,41 @@ struct ChatView: View {
         }
         .navigationTitle(conversation.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        Task { await conversationAction { try await $0.markRead(conversationId: conversation.id) } }
+                    } label: {
+                        Label(String(localized: "chat.action.markRead"), systemImage: "envelope.open")
+                    }
+                    Button {
+                        Task { await conversationAction { try await $0.pin(conversationId: conversation.id, pinned: true) } }
+                    } label: {
+                        Label(String(localized: "chat.action.pin"), systemImage: "pin")
+                    }
+                    Button {
+                        Task { await conversationAction { try await $0.mute(conversationId: conversation.id, muted: true) } }
+                    } label: {
+                        Label(String(localized: "chat.action.mute"), systemImage: "bell.slash")
+                    }
+                    Button {
+                        Task { await conversationAction { try await $0.archive(conversationId: conversation.id, archived: true) } }
+                    } label: {
+                        Label(String(localized: "chat.action.archive"), systemImage: "archivebox")
+                    }
+                    Divider()
+                    Button(role: .destructive) {
+                        Task { await conversationAction { try await $0.leave(conversationId: conversation.id) } }
+                    } label: {
+                        Label(String(localized: "chat.action.leave"), systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel(Text("chat.menu.a11y"))
+            }
+        }
         .alert(
             String(localized: "error.title"),
             isPresented: $viewModel.showError,

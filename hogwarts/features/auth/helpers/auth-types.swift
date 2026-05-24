@@ -19,14 +19,26 @@ struct SignInRequest: Encodable {
     let password: String
 }
 
-struct OAuthSignInRequest: Encodable {
-    let provider: String
-    let token: String
+/// Google OAuth request — sends id_token
+struct GoogleSignInRequest: Encodable {
+    let idToken: String
 }
 
-struct RefreshTokenRequest: Encodable {
-    let refreshToken: String
+/// Facebook OAuth request — sends access_token
+struct FacebookSignInRequest: Encodable {
+    let accessToken: String
 }
+
+/// Apple OAuth request — sends identity_token + optional profile fields
+struct AppleSignInRequest: Encodable {
+    let identityToken: String
+    let authorizationCode: String?
+    let givenName: String?
+    let familyName: String?
+}
+
+// RefreshTokenRequest removed — refresh uses PUT /mobile/auth with
+// X-Refresh-Token header (handled in AuthManager.refreshToken)
 
 // MARK: - Session State
 
@@ -42,6 +54,9 @@ enum SessionState {
 struct TokenPayload {
     let sub: String
     let exp: Date
+    let email: String?
+    let role: String?
+    let name: String?
     let schoolId: String?
 
     /// Token is expired
@@ -75,9 +90,12 @@ struct TokenPayload {
         }
 
         let exp = Date(timeIntervalSince1970: expValue)
+        let email = json["email"] as? String
+        let role = json["role"] as? String
+        let name = json["name"] as? String
         let schoolId = json["schoolId"] as? String
 
-        return TokenPayload(sub: sub, exp: exp, schoolId: schoolId)
+        return TokenPayload(sub: sub, exp: exp, email: email, role: role, name: name, schoolId: schoolId)
     }
 
     /// Base64URL decode (JWT uses URL-safe base64 without padding)

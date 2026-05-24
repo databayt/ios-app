@@ -31,6 +31,13 @@ enum AppTheme: String, CaseIterable {
 // MARK: - Profile Request
 
 /// Update profile request
+/// Web API: PUT /mobile/profile — body: {username?, bio?}
+struct ProfileUpdateRequest: Encodable {
+    let username: String?
+    let bio: String?
+}
+
+/// Legacy update profile request (kept for reference — not used by web API)
 struct UpdateProfileRequest: Encodable {
     let name: String?
     let nameAr: String?

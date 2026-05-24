@@ -6,55 +6,32 @@ import Foundation
 /// CRITICAL: All actions must include schoolId for multi-tenant isolation
 final class ProfileActions: Sendable {
 
-    private let api = APIClient.shared
+    private let api: APIClientProtocol
+
+    /// Default-arg init keeps every existing `ProfileActions()` call site
+    /// untouched; tests inject a `MockAPIClient` without reaching for
+    /// `APIClient.shared`.
+    init(api: APIClientProtocol = APIClient.shared) {
+        self.api = api
+    }
 
     // MARK: - Profile
 
     /// Get current user profile
+    /// Web API: GET /mobile/profile — returns full profile with nested student/teacher/school
     func getProfile(schoolId: String) async throws -> User {
-        return try await api.get(
-            "/profile",
-            query: ["schoolId": schoolId],
-            as: User.self
-        )
+        return try await api.get("/mobile/profile", as: User.self)
     }
 
     /// Update profile fields
+    /// Web API: PUT /mobile/profile — body: {username?, bio?}
     func updateProfile(
-        _ request: UpdateProfileRequest,
+        _ request: ProfileUpdateRequest,
         schoolId: String
     ) async throws -> User {
-        struct UpdateRequest: Encodable {
-            let profile: UpdateProfileRequest
-            let schoolId: String
-        }
-
-        let body = UpdateRequest(profile: request, schoolId: schoolId)
-        return try await api.put("/profile", body: body, as: User.self)
+        return try await api.put("/mobile/profile", body: request, as: User.self)
     }
 
-    // MARK: - Notification Preferences
-
-    /// Get notification preferences
-    func getNotificationPreferences(schoolId: String) async throws -> NotificationPreferences {
-        return try await api.get(
-            "/notifications/preferences",
-            query: ["schoolId": schoolId],
-            as: NotificationPreferences.self
-        )
-    }
-
-    /// Update notification preferences
-    func updateNotificationPreferences(
-        _ preferences: NotificationPreferences,
-        schoolId: String
-    ) async throws {
-        struct PreferencesRequest: Encodable {
-            let preferences: NotificationPreferences
-            let schoolId: String
-        }
-
-        let body = PreferencesRequest(preferences: preferences, schoolId: schoolId)
-        _ = try await api.put("/notifications/preferences", body: body, as: NotificationPreferences.self)
-    }
+    // NOTE: Notification preferences endpoints (/mobile/notifications/preferences)
+    // are being added separately to the web API and are not yet available.
 }

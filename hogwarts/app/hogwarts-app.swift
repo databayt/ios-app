@@ -11,6 +11,7 @@ struct HogwartsApp: App {
     @State private var tenantContext = TenantContext()
     @State private var biometricService = BiometricService()
     @AppStorage("appTheme") private var appTheme: String = AppTheme.system.rawValue
+    @AppStorage("selectedLanguage") private var selectedLanguage: String = ""
 
     var body: some Scene {
         WindowGroup {
@@ -20,7 +21,25 @@ struct HogwartsApp: App {
                 .environment(biometricService)
                 .modelContainer(DataContainer.shared.container)
                 .preferredColorScheme(resolvedColorScheme)
+                .environment(\.locale, resolvedLocale)
+                .environment(\.layoutDirection, resolvedLayoutDirection)
         }
+    }
+
+    /// Resolve in-app language override to a Locale; empty string means
+    /// "follow the system" so the system locale is used.
+    private var resolvedLocale: Locale {
+        guard !selectedLanguage.isEmpty else { return .current }
+        return Locale(identifier: selectedLanguage)
+    }
+
+    /// Layout direction is derived from the resolved locale so RTL flips
+    /// happen instantly when the user switches language in-app, without
+    /// requiring an app relaunch.
+    private var resolvedLayoutDirection: LayoutDirection {
+        let code = resolvedLocale.language.languageCode?.identifier
+            ?? resolvedLocale.identifier
+        return ["ar", "he", "fa", "ur"].contains(code) ? .rightToLeft : .leftToRight
     }
 
     /// Resolve @AppStorage theme to ColorScheme
@@ -91,8 +110,11 @@ struct ContentView: View {
 struct MainTabView: View {
     @Environment(AuthManager.self) private var authManager
 
-    @State private var selectedTab: AppTab = .dashboard
-    @State private var navigationState = NotificationNavigationState()
+    /// Single source of truth for the active tab — owned by the
+    /// `NotificationNavigationState` singleton so push deep-links from the
+    /// `AppDelegate`, dashboard quick-actions, and home-tile taps all
+    /// converge on the same instance.
+    @State private var navigationState = NotificationNavigationState.shared
 
     private var role: UserRole {
         authManager.role
@@ -104,8 +126,15 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            DashboardContent()
+        @Bindable var nav = navigationState
+        TabView(selection: $nav.selectedTab) {
+            // iOS-style 4×4 home grid + glass dock — parity with Android home-screen.
+            // Tile taps flip `navigationState.selectedTab`; non-tab destinations are
+            // no-ops until the respective screens are wired in later phases.
+            HomeScreen(
+                counts: .zero,
+                onSelectTab: { navigationState.selectedTab = $0 }
+            )
                 .tabItem {
                     Label(
                         String(localized: "tab.dashboard"),
@@ -134,7 +163,7 @@ struct MainTabView: View {
                     .tag(AppTab.schedule)
             }
 
-            MessagesContent()
+            WaMessagesTabRoot()
                 .tabItem {
                     Label(
                         String(localized: "tab.messages"),
@@ -165,11 +194,8 @@ struct MainTabView: View {
         .overlay(alignment: .top) {
             SyncStatusBanner()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .didReceiveNotification)) { notification in
-            if let destination = NotificationRouter.destination(from: notification.userInfo ?? [:]) {
-                navigationState.navigate(to: destination)
-                selectedTab = navigationState.selectedTab
-            }
-        }
+        // Push deep-links are routed by `AppDelegate` directly into
+        // `NotificationNavigationState.shared`; the bound TabView observes
+        // the mutation and no `NotificationCenter` bridge is needed here.
     }
 }

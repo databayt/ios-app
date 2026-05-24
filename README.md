@@ -4,170 +4,190 @@ Native iOS companion app for the Hogwarts school management platform.
 
 ## Tech Stack
 
-- **Swift 6.0+** / **SwiftUI** / **iOS 18+**
-- **SwiftData** - Offline-first persistence
-- **MVVM + Clean Architecture** - Testable, scalable
-- **BMAD Method** - Agile AI-driven development
+- **Swift 6.2** with strict concurrency (default actor isolation = `MainActor`)
+- **SwiftUI** + `@Observable` (no `ObservableObject`)
+- **iOS 18+** deployment target, **Xcode 26** + **iOS 26.4 SDK** required for builds (Liquid Glass, AppShortcuts)
+- **SwiftData** — versioned schema, offline-first cache
+- **Swift Testing** (`@Test`) for unit tests; XCTest stays for UI tests
+- **String Catalogs** (`Localizable.xcstrings`) — Arabic (default, RTL) + English
 
 ## Quick Start
 
 ```bash
+# Generate the project (idempotent)
+brew install xcodegen swiftlint xcbeautify
+xcodegen generate
+
 # Open in Xcode
 open Hogwarts.xcodeproj
 
-# Or via command line
-xcodebuild -scheme Hogwarts -destination 'platform=iOS Simulator,name=iPhone 16'
+# Build + test from CLI (requires the iOS 26.4 platform installed via
+# Xcode → Settings → Components)
+xcodebuild test \
+  -scheme Hogwarts \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' \
+  -only-testing:HogwartsTests \
+  | xcbeautify
 ```
 
 ## Architecture
 
-### Feature-Based Structure (Mirrors Hogwarts Web)
+### Mirror pattern
+
+The folder layout mirrors the Hogwarts web app feature-for-feature so the
+two clients evolve together. Within each feature folder:
 
 ```
-Hogwarts/
-├── App/                          # App entry point
-├── Core/                         # Shared infrastructure
-│   ├── Network/                  # API client, endpoints
-│   ├── Storage/                  # SwiftData, sync engine
-│   ├── Auth/                     # Authentication
-│   └── Extensions/               # Swift extensions
-│
-├── Shared/
-│   ├── UI/                       # UI primitives (Button, Card, Input)
-│   ├── Atom/                     # Composed components (2+ UI primitives)
-│   └── Utils/                    # Utilities
-│
-└── Features/                     # Feature modules
-    └── {Feature}/                # e.g., Students, Attendance
-        ├── Models/
-        │   └── {Feature}.swift           # Data models
-        ├── Views/
-        │   ├── {Feature}Content.swift    # Main view (mirrors content.tsx)
-        │   ├── {Feature}Form.swift       # Form view (mirrors form.tsx)
-        │   └── {Feature}Table.swift      # Table view (mirrors table.tsx)
-        ├── ViewModels/
-        │   └── {Feature}ViewModel.swift  # Business logic
-        ├── Services/
-        │   └── {Feature}Actions.swift    # API calls (mirrors actions.ts)
-        └── Helpers/
-            ├── {Feature}Validation.swift # Validation (mirrors validation.ts)
-            └── {Feature}Types.swift      # Types (mirrors types.ts)
+features/{feature}/
+├── views/        # *-content.swift (main), forms, tables, role views
+├── viewmodels/   # @Observable @MainActor view models
+├── services/     # *-actions.swift — calls /mobile/* via APIClient
+├── models/       # Codable DTOs + @Model SwiftData entities
+└── helpers/      # validation, types, navigation routers
 ```
 
-### Component Hierarchy (Atomic Design)
+### Core layer
 
 ```
-1. UI         → Shared/UI/         # Primitives (Button, Input, Card)
-2. Atom       → Shared/Atom/       # Composed (2+ UI primitives)
-3. Feature    → Features/{name}/   # Business components
-4. Screen     → Features/{name}/   # Full screens
+core/
+├── network/      # APIClient (actor) + APIClientProtocol seam,
+│                 # NetworkMonitor (@MainActor @Observable)
+├── storage/      # DataContainer (SwiftData), SyncEngine
+├── auth/         # AuthManager (DI-friendly), KeychainServicing seam,
+│                 # BiometricService, TenantContext
+└── extensions/   # Logger categories
 ```
 
-## Multi-Tenant Safety
+### SyncEngine — offline-first
 
-**CRITICAL**: Always include `schoolId` in API requests.
+`SyncEngine` is `@MainActor @Observable`. It refreshes the three
+cross-cutting reference entities (`students`, `conversations`,
+`notifications`) on launch and on silent push, and replays the
+`PendingAction` mutation queue when the network comes back. Per-user
+data (attendance, grades, timetable) is fetched on demand by feature
+view models, which do their own offline-first cache reads.
+
+State (`isSyncing`, `lastSyncCompletedAt`, `lastSyncError`) is observable
+directly — no `NotificationCenter` bridge — so `SyncStatusBanner` and
+any view can read the current state and the user can tap the error
+banner to retry.
+
+### Routing
+
+Push-notification deep links flow straight from `AppDelegate` into
+`NotificationNavigationState.shared` (a `@MainActor @Observable`
+singleton). No `NotificationCenter` round-trip. The TabView binds to
+`selectedTab`; per-screen deep destinations land in `pendingDestination`
+for views to consume on appear.
+
+### App Shortcuts (iOS 18+)
+
+`HogwartsAppShortcuts` registers Siri / Spotlight / app-icon-long-press
+intents:
+
+- **Open Dashboard**
+- **Today's Schedule**
+- **Open Messages**
+- **Mark Attendance**
+
+Each just flips `NotificationNavigationState.shared.selectedTab` — the
+launch hand-off does the rest.
+
+## Multi-tenant safety
+
+The JWT carries `schoolId`. The mobile API reads it from the token and
+scopes every query server-side. **Do not pass `schoolId` as a query
+param** — the backend ignores it.
 
 ```swift
-// All API calls scoped by schoolId
-let students = try await api.get("/students", schoolId: context.schoolId)
+// Right
+try await api.get("/mobile/students", as: StudentsResponse.self)
+
+// Wrong — schoolId leaks intent that the server doesn't honor
+try await api.get("/mobile/students", query: ["schoolId": id], as: ...)
 ```
 
 ## Localization
 
-- **Arabic (ar)** - RTL, default
-- **English (en)** - LTR
+Source language: **Arabic (RTL)**. English is the secondary locale.
+All strings live in `hogwarts/resources/Localizable.xcstrings`. Use
+`String(localized: "key")`; never embed raw English (or Arabic) text
+inside a view.
 
-## BMAD Workflow
-
-| Phase | Status | Command |
-|-------|--------|---------|
-| Analysis | Complete | `/ios-analyst` |
-| Planning | Complete | `/ios-architect` |
-| Solutioning | In Progress | `/ios-architect` |
-| Implementation | Pending | `/ios-dev` |
-
-### Agent Commands
-
-```bash
-/ios-analyst    # Requirements analysis
-/ios-architect  # Architecture decisions
-/ios-dev        # Swift implementation
-/ios-qa         # Testing
-/ios-ui         # SwiftUI components
-/ios-status     # Workflow status
-/ios-next       # Advance workflow
-```
-
-## Offline-First
-
-All features work offline with automatic sync:
-
-| Feature | Offline | Sync |
-|---------|---------|------|
-| Dashboard | View cached | On launch |
-| Attendance | View + queue | Real-time |
-| Grades | View cached | Pull refresh |
-| Messages | View + queue | Real-time |
+Layout uses logical edges (`.leading`/`.trailing`, `.padding(.leading,)`)
+so SwiftUI auto-mirrors. The in-app language toggle writes to
+`@AppStorage("selectedLanguage")` and `HogwartsApp` flips
+`\.layoutDirection` accordingly without an app relaunch.
 
 ## Testing
 
-```bash
-# Unit tests
-xcodebuild test -scheme Hogwarts
+Unit tests use **Swift Testing** (`@Test`, `#expect`) and live next to
+the feature they cover. The `MockAPIClient` in
+`HogwartsTests/sync-engine-mock-tests.swift` is the canonical stub —
+it conforms to `APIClientProtocol`, records every call, and supports
+`stubEmpty` / `stubFailure` / `installSuccess` / `stubRawSuccess`.
 
-# UI tests
-xcodebuild test -scheme HogwartsUITests
+```bash
+xcodebuild test \
+  -scheme Hogwarts \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' \
+  -only-testing:HogwartsTests/SyncEngineMockTests \
+  -only-testing:HogwartsTests/AuthManagerRestoreTests \
+  | xcbeautify
 ```
 
-**Target**: 80%+ code coverage
+UI tests stay on **XCTest** in `HogwartsUITests/`.
 
-## Design Language
+**Target**: 80% line coverage on `core/` + every feature's `services/`
+and `viewmodels/`.
 
-The app uses Apple's native design language with iOS 26 aesthetic:
+## CI
 
-- **Liquid Glass** - glassmorphism with frosted background materials
-- **Continuous Corners** - squircle shapes (RoundedRectangle style: .continuous)
-- **Native Materials** - .ultraThinMaterial, .thinMaterial, .regularMaterial
-- **SF Symbols** - hierarchical rendering for consistent icons
-- **Context Menus** - long-press actions on interactive elements
-- **Inset Grouped Lists** - native iOS form styling
-- **Standardized Shadows** - consistent elevation system
+`.github/workflows/build-test.yml` runs three jobs:
 
-The design system is documented in [Apple Design Guidelines](docs/apple-design-guidelines.md).
+1. **`lint`** — `swiftlint --strict` (gates the rest)
+2. **`build-and-test`** — Xcode 26, iPhone 17 Pro / iOS 26.4 simulator,
+   DerivedData + SPM caching, `xcbeautify` output, coverage uploaded
+   to Codecov, `xcresult` archived as a build artifact.
+3. **`archive`** — Release-config xcarchive on every push to `main`,
+   uploaded as an artifact for TestFlight handoff.
 
-## TestFlight Distribution
+## Design language
 
-Distribute beta builds to testers via Apple's TestFlight service:
+iOS 26 Liquid Glass + Apple HIG. See [Apple Design Guidelines](docs/apple-design-guidelines.md).
 
-### Quick Start
+- `.glassEffect()` and `GlassEffectContainer` on the navigation layer
+  (toolbars, sheets, floating actions) — never on content rows.
+- Continuous-corner `RoundedRectangle(... style: .continuous)`.
+- Materials (`.ultraThinMaterial`, `.thinMaterial`, `.regularMaterial`)
+  for translucent surfaces; honor `accessibilityReduceTransparency`.
+- SF Symbols 6 with hierarchical rendering and `.symbolEffect(...)`.
+- Dynamic Type via semantic font sizes (`.title2`, `.body`, `.caption`).
+
+## TestFlight distribution
 
 ```bash
-# Archive for TestFlight (requires Apple Developer account + Team ID)
+# Requires Apple Developer Team ID
 ./scripts/archive-for-testflight.sh YOUR_TEAM_ID
-
-# Build artifacts:
-# - build/Hogwarts.xcarchive (archive)
-# - build/Hogwarts.ipa (app binary)
 ```
 
-See [TestFlight Distribution Guide](docs/testflight-distribution.md) for complete setup instructions.
-
-### Prerequisites
-
-- Apple Developer Account ($99/year)
-- Team ID from developer.apple.com
-- App record in App Store Connect
-- Provisioning profiles configured
+See [TestFlight Distribution](docs/testflight-distribution.md).
 
 ## Documentation
 
-- [PRD](docs/prd.md) - Product requirements
-- [Architecture](docs/architecture.md) - Technical design
-- [Apple Design Guidelines](docs/apple-design-guidelines.md) - Design system (Liquid Glass, materials, spacing)
-- [TestFlight Distribution](docs/testflight-distribution.md) - Beta testing setup
-- [Workflow Status](docs/bmad-workflow-status.yaml) - BMAD tracking
+- [CHANGELOG](CHANGELOG.md) — what changed and why
+- [PRD](docs/prd.md) — product requirements
+- [Architecture](docs/architecture.md) — canonical technical reference
+- [Apple Design Guidelines](docs/apple-design-guidelines.md) — design system
+- [TestFlight Distribution](docs/testflight-distribution.md) — beta setup
+- [docs/history/](docs/history/) — phase-by-phase progress reports
+  (kept for archeology, not as canonical references)
 
 ## Related
 
-- [Hogwarts Web](https://ed.databayt.org) - Web platform
-- [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD) - Development methodology
+- [Hogwarts Web](https://ed.databayt.org) — Web platform, source of truth
+  for business logic. Mobile API at `/api/mobile/*`.
+- [Hogwarts Android](https://github.com/databayt/kotlin-app) — Sibling
+  Kotlin app; iOS mirrors its module boundaries and architectural
+  patterns where they translate (StateFlow → `@Observable`, Hilt →
+  factory init with default args, Room → SwiftData).

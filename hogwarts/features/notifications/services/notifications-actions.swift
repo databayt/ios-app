@@ -6,57 +6,61 @@ import Foundation
 /// CRITICAL: All actions must include schoolId for multi-tenant isolation
 final class NotificationsActions: Sendable {
 
-    private let api = APIClient.shared
+    private let api: APIClientProtocol
+
+    init(api: APIClientProtocol = APIClient.shared) {
+        self.api = api
+    }
 
     // MARK: - Read Actions
 
-    /// Get notifications list
-    /// GET /notifications?schoolId=X
-    func getNotifications(schoolId: String) async throws -> [AppNotification] {
-        try await api.get(
-            "/notifications",
-            query: ["schoolId": schoolId],
-            as: [AppNotification].self
+    /// Get notifications list (paginated)
+    /// Web API: GET /mobile/notifications?page=N&per_page=N&unread=true
+    /// Returns: {data: [...], total, unread_count, page, per_page}
+    func getNotifications(
+        schoolId: String,
+        page: Int = 1,
+        perPage: Int = 20,
+        unreadOnly: Bool = false
+    ) async throws -> NotificationsResponse {
+        var params: [String: String] = [
+            "page": String(page),
+            "per_page": String(perPage)
+        ]
+        if unreadOnly { params["unread"] = "true" }
+
+        return try await api.get(
+            "/mobile/notifications",
+            query: params,
+            as: NotificationsResponse.self
         )
     }
 
     // MARK: - Write Actions
 
-    /// Mark notification as read
-    /// PUT /notifications/{id}/read
+    /// Mark a single notification as read
+    /// Web API: POST /mobile/notifications/{notificationId}/read
     func markAsRead(
         notificationId: String,
         schoolId: String
     ) async throws {
-        struct ReadRequest: Encodable {
-            let schoolId: String
-        }
-
-        let _: EmptyResponse = try await api.put(
-            "/notifications/\(notificationId)/read",
-            body: ReadRequest(schoolId: schoolId)
+        struct EmptyBody: Encodable {}
+        let _: EmptyResponse = try await api.post(
+            "/mobile/notifications/\(notificationId)/read",
+            body: EmptyBody()
         )
     }
 
     /// Mark all notifications as read
-    /// PUT /notifications/read-all?schoolId=X
+    /// Web API: POST /mobile/notifications/read-all
     func markAllAsRead(schoolId: String) async throws {
-        struct ReadAllRequest: Encodable {
-            let schoolId: String
-        }
-
-        let _: EmptyResponse = try await api.put(
-            "/notifications/read-all",
-            body: ReadAllRequest(schoolId: schoolId)
+        struct EmptyBody: Encodable {}
+        let _: EmptyResponse = try await api.post(
+            "/mobile/notifications/read-all",
+            body: EmptyBody()
         )
     }
 
-    /// Delete a notification
-    /// DELETE /notifications/{id}
-    func deleteNotification(
-        notificationId: String,
-        schoolId: String
-    ) async throws {
-        try await api.delete("/notifications/\(notificationId)?schoolId=\(schoolId)")
-    }
+    // NOTE: DELETE /mobile/notifications/{id} does not exist in the web API.
+    // Notifications are read-only from the mobile side (mark read only).
 }

@@ -1,31 +1,42 @@
 import Foundation
 import Network
 
-/// Network connectivity monitor
-/// Used for offline-first sync decisions
+/// Network connectivity monitor.
+///
+/// `@MainActor @Observable` so SwiftUI views read `isConnected` directly
+/// and Swift 6 strict concurrency stops complaining about cross-actor
+/// mutation. The underlying `NWPathMonitor` runs on its own queue and
+/// hops back to the main actor via `Task { @MainActor in … }` — no more
+/// `DispatchQueue.main.async` and no more `@unchecked Sendable`.
+@MainActor
 @Observable
-final class NetworkMonitor: @unchecked Sendable {
+final class NetworkMonitor {
     static let shared = NetworkMonitor()
 
-    private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "NetworkMonitor")
+    // `nonisolated`: NWPathMonitor / DispatchQueue are intrinsically
+    // thread-safe (the framework synchronizes internally), and the
+    // synchronous `isOnline` accessor below needs to read `monitor`
+    // without hopping to MainActor.
+    private nonisolated let monitor = NWPathMonitor()
+    private nonisolated let monitorQueue = DispatchQueue(label: "NetworkMonitor")
 
-    /// Current connection status
+    /// Latest observed connectivity. Updated on the main actor only.
     var isConnected: Bool = true
-
-    /// Thread-safe connectivity check via NWPathMonitor's synchronous status
-    nonisolated var isOnline: Bool {
-        monitor.currentPath.status == .satisfied
-    }
 
     /// Connection type
     var connectionType: ConnectionType = .unknown
 
-    enum ConnectionType {
+    enum ConnectionType: Sendable {
         case wifi
         case cellular
         case ethernet
         case unknown
+    }
+
+    /// Synchronous status read from `NWPathMonitor`. Safe to call from any
+    /// isolation domain — `NWPath.status` is read-only and thread-safe.
+    nonisolated var isOnline: Bool {
+        monitor.currentPath.status == .satisfied
     }
 
     private init() {
@@ -34,38 +45,27 @@ final class NetworkMonitor: @unchecked Sendable {
 
     private func startMonitoring() {
         monitor.pathUpdateHandler = { [weak self] path in
-            DispatchQueue.main.async {
-                self?.isConnected = path.status == .satisfied
-                self?.connectionType = self?.getConnectionType(path) ?? .unknown
-
-                // Post notification for sync engine
-                NotificationCenter.default.post(
-                    name: .networkStatusChanged,
-                    object: nil,
-                    userInfo: ["isConnected": path.status == .satisfied]
-                )
+            // `path` is a value type and Sendable; we capture only what we
+            // need before hopping to the MainActor to mutate state.
+            let connected = path.status == .satisfied
+            let type = Self.connectionType(for: path)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isConnected = connected
+                self.connectionType = type
             }
         }
-
-        monitor.start(queue: queue)
+        monitor.start(queue: monitorQueue)
     }
 
-    private func getConnectionType(_ path: NWPath) -> ConnectionType {
-        if path.usesInterfaceType(.wifi) {
-            return .wifi
-        } else if path.usesInterfaceType(.cellular) {
-            return .cellular
-        } else if path.usesInterfaceType(.wiredEthernet) {
-            return .ethernet
-        }
+    private nonisolated static func connectionType(for path: NWPath) -> ConnectionType {
+        if path.usesInterfaceType(.wifi) { return .wifi }
+        if path.usesInterfaceType(.cellular) { return .cellular }
+        if path.usesInterfaceType(.wiredEthernet) { return .ethernet }
         return .unknown
     }
 
     deinit {
         monitor.cancel()
     }
-}
-
-extension Notification.Name {
-    static let networkStatusChanged = Notification.Name("networkStatusChanged")
 }

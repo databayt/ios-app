@@ -6,57 +6,17 @@ import Foundation
 /// CRITICAL: All actions must include schoolId for multi-tenant isolation
 final class AttendanceActions: Sendable {
 
-    private let api = APIClient.shared
+    private let api: APIClientProtocol
     private let syncEngine = SyncEngine.shared
+
+    init(api: APIClientProtocol = APIClient.shared) {
+        self.api = api
+    }
 
     // MARK: - Read Actions
 
-    /// Get attendance records with filters and pagination
-    /// Mirrors: getAttendance() server action
-    func getAttendance(
-        schoolId: String,
-        filters: AttendanceFilters = AttendanceFilters()
-    ) async throws -> AttendanceResponse {
-        var params = filters.queryParams
-        params["schoolId"] = schoolId
-
-        return try await api.get("/attendance", query: params, as: AttendanceResponse.self)
-    }
-
-    /// Get single attendance record by ID
-    func getAttendanceRecord(id: String, schoolId: String) async throws -> Attendance {
-        return try await api.get(
-            "/attendance/\(id)",
-            query: ["schoolId": schoolId],
-            as: Attendance.self
-        )
-    }
-
-    /// Get attendance for a specific student
-    func getStudentAttendance(
-        studentId: String,
-        schoolId: String,
-        dateFrom: Date? = nil,
-        dateTo: Date? = nil
-    ) async throws -> [Attendance] {
-        var params: [String: String] = [
-            "studentId": studentId,
-            "schoolId": schoolId
-        ]
-
-        let formatter = ISO8601DateFormatter()
-        if let dateFrom = dateFrom {
-            params["dateFrom"] = formatter.string(from: dateFrom)
-        }
-        if let dateTo = dateTo {
-            params["dateTo"] = formatter.string(from: dateTo)
-        }
-
-        let response = try await api.get("/attendance", query: params, as: AttendanceResponse.self)
-        return response.data
-    }
-
     /// Get attendance for a specific class on a date
+    /// Web API: GET /mobile/attendance/class/{classId}?date=YYYY-MM-DD
     func getClassAttendance(
         classId: String,
         date: Date,
@@ -64,37 +24,57 @@ final class AttendanceActions: Sendable {
     ) async throws -> [Attendance] {
         let formatter = ISO8601DateFormatter()
         let params: [String: String] = [
-            "classId": classId,
-            "date": formatter.string(from: date),
-            "schoolId": schoolId
+            "date": formatter.string(from: date)
         ]
 
-        let response = try await api.get("/attendance", query: params, as: AttendanceResponse.self)
-        return response.data
+        return try await api.get(
+            "/mobile/attendance/class/\(classId)",
+            query: params,
+            as: [Attendance].self
+        )
     }
 
-    /// Get attendance statistics for a student
-    /// Mirrors: getAttendanceStats() server action
-    func getStats(
+    /// Get attendance history for a specific student (paginated)
+    /// Web API: GET /mobile/attendance/student/{studentId}?from=X&to=Y&page=N&per_page=N
+    func getStudentAttendance(
         studentId: String,
         schoolId: String,
-        dateFrom: Date? = nil,
-        dateTo: Date? = nil
-    ) async throws -> AttendanceStats {
+        from: Date? = nil,
+        to: Date? = nil,
+        page: Int = 1,
+        perPage: Int = 20
+    ) async throws -> AttendanceResponse {
         var params: [String: String] = [
-            "studentId": studentId,
-            "schoolId": schoolId
+            "page": String(page),
+            "per_page": String(perPage)
         ]
 
         let formatter = ISO8601DateFormatter()
-        if let dateFrom = dateFrom {
-            params["dateFrom"] = formatter.string(from: dateFrom)
+        if let from = from {
+            params["from"] = formatter.string(from: from)
         }
-        if let dateTo = dateTo {
-            params["dateTo"] = formatter.string(from: dateTo)
+        if let to = to {
+            params["to"] = formatter.string(from: to)
         }
 
-        return try await api.get("/attendance/stats", query: params, as: AttendanceStats.self)
+        return try await api.get(
+            "/mobile/attendance/student/\(studentId)",
+            query: params,
+            as: AttendanceResponse.self
+        )
+    }
+
+    /// Get attendance summary/statistics for a student
+    /// Web API: GET /mobile/attendance/summary/{studentId}
+    /// Returns: {total, present, absent, late, excused, percentage}
+    func getStats(
+        studentId: String,
+        schoolId: String
+    ) async throws -> AttendanceStats {
+        return try await api.get(
+            "/mobile/attendance/summary/\(studentId)",
+            as: AttendanceStats.self
+        )
     }
 
     /// Get students in a class
@@ -103,7 +83,7 @@ final class AttendanceActions: Sendable {
         schoolId: String
     ) async throws -> [StudentInfo] {
         return try await api.get(
-            "/classes/\(classId)/students",
+            "/mobile/teacher/classes/\(classId)/students",
             query: ["schoolId": schoolId],
             as: [StudentInfo].self
         )
@@ -112,7 +92,7 @@ final class AttendanceActions: Sendable {
     /// Get classes assigned to the current teacher
     func getTeacherClasses(schoolId: String) async throws -> [TeacherClassItem] {
         return try await api.get(
-            "/classes/teacher",
+            "/mobile/teacher/classes",
             query: ["schoolId": schoolId],
             as: [TeacherClassItem].self
         )
@@ -121,7 +101,9 @@ final class AttendanceActions: Sendable {
     // MARK: - Write Actions
 
     /// Mark attendance for a single student
-    /// Mirrors: markAttendance() server action
+    /// Web API: POST /mobile/attendance/mark
+    /// Body: {student_id, section_id?, date?, status, notes?, method?}
+    /// Returns: {id, student_id, date, status}
     func markAttendance(
         _ request: AttendanceMarkRequest,
         schoolId: String
@@ -138,203 +120,22 @@ final class AttendanceActions: Sendable {
             throw AttendanceError.validationFailed(validation.errors)
         }
 
-        struct MarkRequest: Encodable {
-            let attendance: AttendanceMarkRequest
-            let schoolId: String
-        }
-
-        let body = MarkRequest(attendance: request, schoolId: schoolId)
-        return try await api.post("/attendance", body: body, as: Attendance.self)
+        return try await api.post("/mobile/attendance/mark", body: request, as: Attendance.self)
     }
 
     /// Bulk mark attendance for a class
-    /// Mirrors: bulkMarkAttendance() server action
+    /// Web API: POST /mobile/attendance/bulk
+    /// Body: {records: [{student_id, status, notes?}], section_id?, date?}
     func bulkMarkAttendance(
         _ request: AttendanceBulkMarkRequest,
         schoolId: String
     ) async throws -> [Attendance] {
-        struct BulkMarkRequest: Encodable {
-            let attendance: AttendanceBulkMarkRequest
-            let schoolId: String
-        }
-
-        let body = BulkMarkRequest(attendance: request, schoolId: schoolId)
-        return try await api.post("/attendance/bulk", body: body, as: [Attendance].self)
+        return try await api.post("/mobile/attendance/bulk", body: request, as: [Attendance].self)
     }
 
-    /// Update existing attendance record
-    func updateAttendance(
-        id: String,
-        status: AttendanceStatus,
-        notes: String?,
-        schoolId: String
-    ) async throws -> Attendance {
-        struct UpdateRequest: Encodable {
-            let status: String
-            let notes: String?
-            let schoolId: String
-        }
-
-        let body = UpdateRequest(status: status.rawValue, notes: notes, schoolId: schoolId)
-        return try await api.put("/attendance/\(id)", body: body, as: Attendance.self)
-    }
-
-    /// Delete attendance record (Admin only)
-    func deleteAttendance(id: String, schoolId: String) async throws {
-        try await api.delete("/attendance/\(id)?schoolId=\(schoolId)")
-    }
-
-    // MARK: - QR Check-in
-
-    /// QR code check-in for students
-    /// Mirrors: qrCheckIn() server action
-    func qrCheckIn(
-        _ request: QRCheckInRequest,
-        schoolId: String
-    ) async throws -> QRCheckInResponse {
-        // Validate QR code format
-        let validation = AttendanceValidation.validateQRCheckIn(
-            qrCode: request.qrCode,
-            studentId: request.studentId
-        )
-
-        guard validation.isValid else {
-            throw AttendanceError.validationFailed(validation.errors)
-        }
-
-        struct CheckInRequest: Encodable {
-            let qrCode: String
-            let studentId: String
-            let schoolId: String
-        }
-
-        let body = CheckInRequest(
-            qrCode: request.qrCode,
-            studentId: request.studentId,
-            schoolId: schoolId
-        )
-
-        return try await api.post("/attendance/qr", body: body, as: QRCheckInResponse.self)
-    }
-
-    /// Create QR session for a class (Teacher)
-    func createQRSession(
-        classId: String,
-        periodId: String?,
-        expiresInMinutes: Int = 15,
-        schoolId: String
-    ) async throws -> QRSession {
-        struct CreateSessionRequest: Encodable {
-            let classId: String
-            let periodId: String?
-            let expiresInMinutes: Int
-            let schoolId: String
-        }
-
-        let body = CreateSessionRequest(
-            classId: classId,
-            periodId: periodId,
-            expiresInMinutes: expiresInMinutes,
-            schoolId: schoolId
-        )
-
-        return try await api.post("/attendance/qr/session", body: body, as: QRSession.self)
-    }
-
-    // MARK: - Excuses
-
-    /// Submit excuse for absence
-    /// Mirrors: submitExcuse() server action
-    func submitExcuse(
-        _ request: ExcuseSubmitRequest,
-        schoolId: String
-    ) async throws -> AttendanceExcuse {
-        // Validate input
-        let validation = AttendanceValidation.validateExcuseForm(
-            studentId: request.studentId,
-            date: request.date,
-            reason: request.reason,
-            documentUrl: request.documentUrl
-        )
-
-        guard validation.isValid else {
-            throw AttendanceError.validationFailed(validation.errors)
-        }
-
-        struct ExcuseRequest: Encodable {
-            let excuse: ExcuseSubmitRequest
-            let schoolId: String
-        }
-
-        let body = ExcuseRequest(excuse: request, schoolId: schoolId)
-        return try await api.post("/attendance/excuse", body: body, as: AttendanceExcuse.self)
-    }
-
-    /// Review excuse (Approve/Reject)
-    /// Mirrors: reviewExcuse() server action
-    func reviewExcuse(
-        _ request: ExcuseReviewRequest,
-        schoolId: String
-    ) async throws -> AttendanceExcuse {
-        struct ReviewRequest: Encodable {
-            let status: String
-            let reviewNotes: String?
-            let schoolId: String
-        }
-
-        let body = ReviewRequest(
-            status: request.status,
-            reviewNotes: request.reviewNotes,
-            schoolId: schoolId
-        )
-
-        return try await api.put(
-            "/attendance/excuse/\(request.excuseId)",
-            body: body,
-            as: AttendanceExcuse.self
-        )
-    }
-
-    /// Get excuses submitted for a specific student (Guardian view)
-    func getStudentExcuses(
-        studentId: String,
-        schoolId: String
-    ) async throws -> [AttendanceExcuse] {
-        let params: [String: String] = [
-            "studentId": studentId,
-            "schoolId": schoolId
-        ]
-
-        return try await api.get("/attendance/excuses", query: params, as: [AttendanceExcuse].self)
-    }
-
-    /// Get pending excuses for review (Teacher/Admin)
-    func getPendingExcuses(
-        schoolId: String,
-        filters: ExcuseFilters = ExcuseFilters()
-    ) async throws -> [AttendanceExcuse] {
-        var params: [String: String] = [
-            "schoolId": schoolId,
-            "status": AttendanceExcuse.ExcuseStatus.pending.rawValue
-        ]
-
-        if let studentId = filters.studentId {
-            params["studentId"] = studentId
-        }
-
-        let formatter = ISO8601DateFormatter()
-        if let dateFrom = filters.dateFrom {
-            params["dateFrom"] = formatter.string(from: dateFrom)
-        }
-        if let dateTo = filters.dateTo {
-            params["dateTo"] = formatter.string(from: dateTo)
-        }
-
-        params["page"] = String(filters.page)
-        params["pageSize"] = String(filters.pageSize)
-
-        return try await api.get("/attendance/excuse", query: params, as: [AttendanceExcuse].self)
-    }
+    // NOTE: QR check-in, QR sessions, excuse management, individual record
+    // update/delete, and getAttendanceRecord do not exist in the web mobile API.
+    // These features may be added in future API versions.
 
     // MARK: - Offline Actions
 
@@ -352,7 +153,7 @@ final class AttendanceActions: Sendable {
         // Queue for later
         let payload = try JSONEncoder().encode(request)
         await syncEngine.queueAction(
-            endpoint: "/attendance",
+            endpoint: "/mobile/attendance/mark",
             method: .post,
             payload: payload
         )
@@ -373,28 +174,7 @@ final class AttendanceActions: Sendable {
         // Queue for later
         let payload = try JSONEncoder().encode(request)
         await syncEngine.queueAction(
-            endpoint: "/attendance/bulk",
-            method: .post,
-            payload: payload
-        )
-
-        return nil
-    }
-
-    /// Submit excuse (offline-capable)
-    @MainActor
-    func submitExcuseOffline(
-        _ request: ExcuseSubmitRequest,
-        schoolId: String
-    ) async throws -> AttendanceExcuse? {
-        if NetworkMonitor.shared.isConnected {
-            return try await submitExcuse(request, schoolId: schoolId)
-        }
-
-        // Queue for later
-        let payload = try JSONEncoder().encode(request)
-        await syncEngine.queueAction(
-            endpoint: "/attendance/excuse",
+            endpoint: "/mobile/attendance/bulk",
             method: .post,
             payload: payload
         )

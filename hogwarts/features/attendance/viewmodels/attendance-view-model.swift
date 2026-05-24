@@ -208,36 +208,17 @@ final class AttendanceViewModel {
     }
 
     /// Load excuses for the current student (guardian view)
+    /// NOTE: Excuse management is not yet available in the web mobile API
     func loadStudentExcuses() async {
-        guard let schoolId = tenantContext?.schoolId,
-              let studentId = getStudentId() else {
-            return
-        }
-
-        do {
-            studentExcuses = try await actions.getStudentExcuses(
-                studentId: studentId,
-                schoolId: schoolId
-            )
-        } catch {
-            // Non-critical — don't block UI
-            Logger.attendance.error("Failed to load student excuses: \(error)")
-        }
+        // Excuse endpoints not available in web mobile API
+        studentExcuses = []
     }
 
     /// Load pending excuses for review
+    /// NOTE: Excuse management is not yet available in the web mobile API
     func loadPendingExcuses() async {
-        guard let schoolId = tenantContext?.schoolId,
-              capabilities.canReviewExcuse else {
-            return
-        }
-
-        do {
-            pendingExcuses = try await actions.getPendingExcuses(schoolId: schoolId)
-        } catch {
-            self.error = error
-            showError = true
-        }
+        // Excuse endpoints not available in web mobile API
+        pendingExcuses = []
     }
 
     /// Load teacher's assigned classes
@@ -422,47 +403,20 @@ final class AttendanceViewModel {
             return
         }
 
-        qrScannerState = .processing
-
-        do {
-            let request = QRCheckInRequest(qrCode: code, studentId: studentId)
-            let response = try await actions.qrCheckIn(request, schoolId: schoolId)
-
-            if response.success, let attendance = response.attendance {
-                qrScannerState = .success(attendance)
-                successMessage = String(localized: "attendance.success.checkedIn")
-                showSuccess = true
-                await loadAttendance()
-            } else {
-                qrScannerState = .error(AttendanceError.qrInvalid)
-            }
-        } catch {
-            qrScannerState = .error(error)
-            self.error = error
-            showError = true
-        }
+        // QR check-in not available in web mobile API
+        qrScannerState = .error(AttendanceError.serverError("QR check-in is not yet available"))
+        self.error = AttendanceError.serverError("QR check-in is not yet available")
+        showError = true
     }
 
     /// Create QR session for class (Teacher)
+    /// NOTE: QR sessions not available in web mobile API
     func createQRSession(classId: String, periodId: String?) async {
-        guard let schoolId = tenantContext?.schoolId,
-              capabilities.canMarkAttendance else {
-            return
-        }
-
-        do {
-            qrSession = try await actions.createQRSession(
-                classId: classId,
-                periodId: periodId,
-                schoolId: schoolId
-            )
-        } catch {
-            self.error = error
-            showError = true
-        }
+        self.error = AttendanceError.serverError("QR sessions are not yet available")
+        showError = true
     }
 
-    // MARK: - Excuse Actions
+    // MARK: - Excuse Actions (NOT YET IN WEB API)
 
     /// Show excuse submission form
     func showExcuseForm(studentId: String, date: Date) {
@@ -470,63 +424,26 @@ final class AttendanceViewModel {
         isShowingExcuseForm = true
     }
 
-    /// Submit excuse
+    /// Submit excuse — NOT AVAILABLE in web mobile API
     func submitExcuse(
         studentId: String,
         date: Date,
         reason: String,
         documentUrl: String?
     ) async -> Bool {
-        guard let schoolId = tenantContext?.schoolId else { return false }
-
-        do {
-            let request = ExcuseSubmitRequest(
-                studentId: studentId,
-                date: date,
-                reason: reason,
-                documentUrl: documentUrl
-            )
-
-            _ = try await actions.submitExcuse(request, schoolId: schoolId)
-
-            successMessage = String(localized: "attendance.success.excuseSubmitted")
-            showSuccess = true
-            isShowingExcuseForm = false
-            return true
-        } catch {
-            self.error = error
-            showError = true
-            return false
-        }
+        self.error = AttendanceError.serverError("Excuse submission is not yet available")
+        showError = true
+        return false
     }
 
-    /// Review excuse (approve/reject)
+    /// Review excuse — NOT AVAILABLE in web mobile API
     func reviewExcuse(
         excuse: AttendanceExcuse,
         approved: Bool,
         notes: String?
     ) async -> Bool {
-        guard let schoolId = tenantContext?.schoolId,
-              capabilities.canReviewExcuse else { return false }
-
-        do {
-            let request = ExcuseReviewRequest(
-                excuseId: excuse.id,
-                status: approved ? "APPROVED" : "REJECTED",
-                reviewNotes: notes
-            )
-
-            _ = try await actions.reviewExcuse(request, schoolId: schoolId)
-
-            successMessage = String(localized: approved
-                ? "attendance.success.excuseApproved"
-                : "attendance.success.excuseRejected")
-            showSuccess = true
-            await loadPendingExcuses()
-            return true
-        } catch {
-            self.error = error
-            showError = true
+        self.error = AttendanceError.serverError("Excuse review is not yet available")
+        showError = true
             return false
         }
     }

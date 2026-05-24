@@ -23,7 +23,9 @@ final class TenantContext {
     func setTenant(schoolId: String, school: School? = nil) {
         self.schoolId = schoolId
         self.school = school
-        self.subdomain = school?.domain
+        if let domain = school?.domain {
+            self.subdomain = domain
+        }
     }
 
     /// Clear tenant (on logout)
@@ -35,15 +37,18 @@ final class TenantContext {
 }
 
 /// School model for tenant context
-/// Mirrors: prisma/models/school.prisma
+/// Web API: GET /mobile/schools returns [{id, name, name_en, logo_url, domain}]
+/// Full school details available via GET /mobile/admin/school
 struct School: Codable, Identifiable {
     let id: String
     let name: String
-    let nameAr: String?
-    let domain: String
+    let nameEn: String?
+    let logoUrl: String?
+    let domain: String?
+
+    // Extended fields (only present from /mobile/admin/school)
     let email: String?
     let phone: String?
-    let logoUrl: String?
     let plan: SchoolPlan?
     let maxStudents: Int?
     let maxTeachers: Int?

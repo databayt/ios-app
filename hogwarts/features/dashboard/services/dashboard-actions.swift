@@ -1,43 +1,33 @@
 import Foundation
 
 /// Dashboard API actions
-/// Mirrors: src/components/platform/dashboard/actions.ts
+/// Web API: Single GET /mobile/dashboard returns all dashboard data
+/// Response includes role-specific fields automatically
 struct DashboardActions {
     private let api = APIClient.shared
 
-    /// Fetch today's schedule for a student
-    func fetchTodaySchedule(schoolId: String) async throws -> [DashboardScheduleItem] {
-        try await api.get("/timetable/today?schoolId=\(schoolId)", as: [DashboardScheduleItem].self)
+    /// Fetch dashboard data — single endpoint returns everything
+    /// Response shape: {user_name, avatar_url, role, school_name,
+    ///   unread_notifications, announcements_count, ...role-specific fields}
+    func fetchDashboard() async throws -> DashboardResponse {
+        try await api.get("/mobile/dashboard", as: DashboardResponse.self)
     }
+}
 
-    /// Fetch recent grades for a student
-    func fetchRecentGrades(schoolId: String, studentId: String) async throws -> [DashboardGradeItem] {
-        try await api.get(
-            "/grades/recent?schoolId=\(schoolId)&studentId=\(studentId)&limit=5",
-            as: [DashboardGradeItem].self
-        )
-    }
+/// Unified dashboard response from GET /mobile/dashboard
+/// Contains common fields plus role-specific extras
+struct DashboardResponse: Codable {
+    // Common fields
+    let userName: String?
+    let avatarUrl: String?
+    let role: String?
+    let schoolName: String?
+    let unreadNotifications: Int?
+    let announcementsCount: Int?
 
-    /// Fetch attendance summary for a student
-    func fetchAttendanceSummary(schoolId: String, studentId: String) async throws -> DashboardAttendanceSummary {
-        try await api.get(
-            "/attendance/summary?schoolId=\(schoolId)&studentId=\(studentId)",
-            as: DashboardAttendanceSummary.self
-        )
-    }
-
-    /// Fetch today's classes for a teacher
-    func fetchTodayClasses(schoolId: String) async throws -> [DashboardClassItem] {
-        try await api.get("/timetable/today/teacher?schoolId=\(schoolId)", as: [DashboardClassItem].self)
-    }
-
-    /// Fetch guardian's children
-    func fetchChildren(schoolId: String) async throws -> [DashboardChild] {
-        try await api.get("/auth/children?schoolId=\(schoolId)", as: [DashboardChild].self)
-    }
-
-    /// Fetch recent messages
-    func fetchRecentMessages(schoolId: String, limit: Int = 5) async throws -> [DashboardMessagePreview] {
-        try await api.get("/messages/recent?schoolId=\(schoolId)&limit=\(limit)", as: [DashboardMessagePreview].self)
-    }
+    // Role-specific fields are dynamic — decoded as needed
+    // Student: schedule, grades, attendance summary
+    // Teacher: today's classes, pending tasks
+    // Guardian: children list
+    // Admin: stats overview
 }

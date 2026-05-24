@@ -144,21 +144,75 @@ struct ExamResult: Codable, Identifiable, Hashable {
 }
 
 /// Paginated exams response
+/// Web API: GET /mobile/exams → {data, total, page, per_page}
 struct ExamsResponse: Codable {
     let data: [Exam]
     let total: Int
     let page: Int
-    let pageSize: Int
-    let totalPages: Int
+    let perPage: Int
 }
 
-/// Paginated exam results response
+/// Paginated student grades response
+/// Web API: GET /mobile/grades/student/{id} → {data, total, page, per_page}
+struct StudentGradesResponse: Codable {
+    let data: [StudentGradeItem]
+    let total: Int
+    let page: Int
+    let perPage: Int
+}
+
+/// Individual grade item from the student grades endpoint
+struct StudentGradeItem: Codable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let description: String?
+    let score: Double
+    let maxScore: Double
+    let percentage: Double
+    let grade: String?
+    let feedback: String?
+    let submittedAt: String?
+    let gradedAt: String?
+    let subjectName: String?
+
+    static func == (lhs: StudentGradeItem, rhs: StudentGradeItem) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+/// Grade summary response
+/// Web API: GET /mobile/grades/summary/{studentId}
+struct GradeSummaryResponse: Codable {
+    let totalResults: Int
+    let averagePercentage: Double
+    let gpa: Double
+    let overallGrade: String?
+    let rank: Int?
+    let totalStudents: Int?
+    let subjects: [GradeSummarySubject]?
+}
+
+/// Subject entry in grade summary
+struct GradeSummarySubject: Codable, Identifiable {
+    let id: String?
+    let name: String
+    let average: Double?
+    let grade: String?
+
+    // Synthesize id if not provided
+    var stableId: String { id ?? name }
+}
+
+/// Legacy exam results response (kept for backward compat with offline cache)
 struct ExamResultsResponse: Codable {
     let data: [ExamResult]
     let total: Int
     let page: Int
-    let pageSize: Int
-    let totalPages: Int
+    let perPage: Int
 }
 
 // MARK: - Grade Calculator

@@ -1,451 +1,356 @@
 import SwiftUI
 import SwiftData
+import os
 
-/// Sync engine for offline-first architecture
-/// Handles data synchronization between local SwiftData and remote API
-actor SyncEngine {
+/// Sync engine for offline-first architecture.
+///
+/// Two responsibilities:
+///   1. Refresh cross-cutting reference data (students, conversations,
+///      notifications) into SwiftData so list views stay snappy and work
+///      offline. Per-user data (attendance, grades, timetable) is fetched
+///      on-demand by feature view models, which already implement their
+///      own offline-first cache reads.
+///   2. Replay the offline mutation queue (`PendingAction`) when the
+///      network comes back, with exponential backoff and a 3-attempt cap.
+///
+/// `@MainActor @Observable` so the SyncStatusBanner and any view can read
+/// `isSyncing` / `lastSyncCompletedAt` / `lastSyncError` directly without
+/// going through `NotificationCenter`.
+@MainActor
+@Observable
+final class SyncEngine {
     static let shared = SyncEngine()
 
-    private let api = APIClient.shared
-    private let networkMonitor = NetworkMonitor.shared
+    // MARK: - Observable state (UI binds to these)
 
-    private var isSyncing = false
+    var isSyncing = false
+    var lastSyncCompletedAt: Date?
+    var lastSyncError: SyncError?
 
-    // MARK: - Public Methods
+    // MARK: - Dependencies
 
-    /// Full sync on app launch
+    private let api: APIClientProtocol
+    private let isOnlineCheck: @Sendable () -> Bool
+    private let contextProvider: @MainActor () -> ModelContext
+    private let logger = Logger.sync
+
+    private var modelContext: ModelContext { contextProvider() }
+
+    /// Only the online-state check, the API, and the model context provider
+    /// are injectable. `NetworkMonitor.shared` and `DataContainer.shared` are
+    /// used by default so production code stays one-liner-small; tests can
+    /// inject an in-memory `ModelContainer` and a constant-bool online flag.
+    init(
+        api: APIClientProtocol = APIClient.shared,
+        isOnline: @escaping @Sendable () -> Bool = { NetworkMonitor.shared.isOnline },
+        contextProvider: @escaping @MainActor () -> ModelContext = { DataContainer.shared.modelContext }
+    ) {
+        self.api = api
+        self.isOnlineCheck = isOnline
+        self.contextProvider = contextProvider
+    }
+
+    // MARK: - Public API
+
+    /// Full sync — runs on app launch, after auth, and on silent push.
+    /// Concurrent fan-out via `async let`; errors per entity are captured
+    /// in `lastSyncError` but never abort sibling syncs.
     func syncAll() async {
         guard !isSyncing else { return }
-        guard networkMonitor.isOnline else { return }
+        guard isOnlineCheck() else { return }
+        guard let context = currentSyncContext() else {
+            logger.notice("syncAll skipped — no signed-in user")
+            return
+        }
 
         isSyncing = true
+        lastSyncError = nil
         defer { isSyncing = false }
 
-        // Process pending actions first
         await processPendingActions()
 
-        // Then sync data (parallel)
-        async let students = syncStudents()
-        async let attendance = syncAttendance()
-        async let grades = syncGrades()
-        async let messages = syncMessages()
-        async let notifications = syncNotifications()
+        async let students   = syncStudents(context: context)
+        async let convos     = syncConversations(context: context)
+        async let notifs     = syncNotifications(context: context)
 
-        _ = await (students, attendance, grades, messages, notifications)
-
-        // Post sync complete notification
-        await MainActor.run {
-            NotificationCenter.default.post(name: .syncCompleted, object: nil)
+        let results = await (students, convos, notifs)
+        let firstError = [results.0, results.1, results.2].compactMap { $0 }.first
+        if let firstError {
+            lastSyncError = firstError
+            logger.error("Sync completed with errors — first: \(String(describing: firstError))")
         }
+
+        lastSyncCompletedAt = .now
     }
 
-    /// Sync specific entity type
-    func sync(_ entityType: EntityType) async {
-        guard networkMonitor.isOnline else { return }
+    /// Sync a single entity (e.g. after a write).
+    @discardableResult
+    func sync(_ entity: SyncableEntity) async -> SyncError? {
+        guard isOnlineCheck() else { return .offline }
+        guard let context = currentSyncContext() else { return .noUser }
 
-        switch entityType {
-        case .students:
-            await syncStudents()
-        case .attendance:
-            await syncAttendance()
-        case .grades:
-            await syncGrades()
-        case .messages:
-            await syncMessages()
-        case .notifications:
-            await syncNotifications()
-        }
-    }
-
-    /// Queue action for offline processing
-    @MainActor
-    func queueAction(
-        endpoint: String,
-        method: HTTPMethod,
-        payload: Data?
-    ) {
-        let action = PendingAction(
-            endpoint: endpoint,
-            method: method,
-            payload: payload
-        )
-
-        let context = DataContainer.shared.modelContext
-        context.insert(action)
-        try? context.save()
-
-        // Try to sync immediately if online
-        if networkMonitor.isOnline {
-            Task {
-                await processPendingActions()
+        let error: SyncError? = await {
+            switch entity {
+            case .students:      return await syncStudents(context: context)
+            case .conversations: return await syncConversations(context: context)
+            case .notifications: return await syncNotifications(context: context)
             }
+        }()
+        if let error { lastSyncError = error }
+        return error
+    }
+
+    /// Queue a write for offline replay. Caller has already encoded the
+    /// payload — we never re-encode, so the bytes the server sees are
+    /// exactly what the feature action sent.
+    ///
+    /// Declared `async` so callers' existing `await` remains idiomatic and
+    /// so we have room to add real awaits here later (e.g. a write-log
+    /// flush) without churning every call site.
+    func queueAction(endpoint: String, method: HTTPMethod, payload: Data?) async {
+        let action = PendingAction(endpoint: endpoint, method: method, payload: payload)
+        modelContext.insert(action)
+        try? modelContext.save()
+
+        if isOnlineCheck() {
+            Task { await processPendingActions() }
         }
     }
 
-    // MARK: - Pending Actions Processing
+    // MARK: - Pending actions queue
 
     private func processPendingActions() async {
-        await MainActor.run {
-            let context = DataContainer.shared.modelContext
+        let descriptor = FetchDescriptor<PendingAction>(
+            predicate: #Predicate {
+                $0.status == "pending" || ($0.status == "failed" && $0.retryCount < 3)
+            },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
 
-            let descriptor = FetchDescriptor<PendingAction>(
-                predicate: #Predicate {
-                    $0.status == "pending" || ($0.status == "failed" && $0.retryCount < 3)
-                },
-                sortBy: [SortDescriptor(\.createdAt)]
-            )
+        guard let pending = try? modelContext.fetch(descriptor) else { return }
 
-            guard let pendingActions = try? context.fetch(descriptor) else { return }
-
-            for action in pendingActions {
-                Task {
-                    await processAction(action, context: context)
-                }
-            }
+        for action in pending {
+            await processAction(action)
         }
     }
 
-    @MainActor
-    private func processAction(_ action: PendingAction, context: ModelContext) async {
-        // Exponential backoff before retry
+    private func processAction(_ action: PendingAction) async {
         if action.retryCount > 0 {
             let delay = pow(2.0, Double(action.retryCount))
             try? await Task.sleep(for: .seconds(delay))
         }
 
         action.status = SyncStatus.syncing.rawValue
-        try? context.save()
+        try? modelContext.save()
 
-        // Extract data before crossing actor boundary
         let endpoint = action.endpoint
-        let method = action.method
-        let payload = action.payload
+        let method   = HTTPMethod(rawValue: action.method) ?? .post
+        let payload  = action.payload
 
         do {
-            try await executeAction(endpoint: endpoint, method: method, payload: payload)
+            switch method {
+            case .post:
+                try await api.postRaw(endpoint, jsonBody: payload)
+            case .put:
+                try await api.putRaw(endpoint, jsonBody: payload)
+            case .delete:
+                try await api.delete(endpoint)
+            case .get, .patch:
+                logger.warning("Skipped unsupported queued method \(method.rawValue) for \(endpoint)")
+            }
             action.status = SyncStatus.completed.rawValue
+            action.errorMessage = nil
         } catch {
             action.retryCount += 1
             if action.retryCount >= 3 {
                 action.status = SyncStatus.failed.rawValue
                 action.errorMessage = "Max retries exceeded: \(error.localizedDescription)"
+                logger.error("Pending action permanently failed: \(endpoint, privacy: .public) \(error.localizedDescription, privacy: .public)")
             } else {
                 action.status = SyncStatus.pending.rawValue
                 action.errorMessage = error.localizedDescription
             }
         }
-
-        try? context.save()
+        try? modelContext.save()
     }
 
-    private func executeAction(endpoint: String, method: String, payload: Data?) async throws {
-        let httpMethod = HTTPMethod(rawValue: method) ?? .post
+    // MARK: - Entity sync
 
-        switch httpMethod {
-        case .post:
-            if let payload {
-                let _: EmptyResponse = try await api.post(endpoint, body: payload)
-            }
-        case .put:
-            if let payload {
-                let _: EmptyResponse = try await api.put(endpoint, body: payload)
-            }
-        case .delete:
-            try await api.delete(endpoint)
-        default:
-            break
+    /// Resolve the user we are syncing for. Returns nil if not signed in.
+    private func currentSyncContext() -> SyncContext? {
+        let descriptor = FetchDescriptor<UserModel>(
+            sortBy: [SortDescriptor(\.lastSyncedAt, order: .reverse)]
+        )
+        guard let user = try? modelContext.fetch(descriptor).first,
+              let schoolId = user.schoolId else {
+            return nil
         }
+        return SyncContext(userId: user.id, schoolId: schoolId)
     }
 
-    // MARK: - Entity Sync Methods
-
-    private func syncStudents() async {
-        await MainActor.run {
-            let context = DataContainer.shared.modelContext
-
-            let userDescriptor = FetchDescriptor<UserModel>(
-                sortBy: [SortDescriptor(\.lastSyncedAt, order: .reverse)]
+    /// Refresh the students list. JWT carries `schoolId` server-side,
+    /// so we pass no query params except pagination.
+    private func syncStudents(context: SyncContext) async -> SyncError? {
+        do {
+            let response: StudentsResponse = try await api.get(
+                "/mobile/students",
+                query: ["per_page": "500"],
+                as: StudentsResponse.self
             )
-            guard let user = try? context.fetch(userDescriptor).first,
-                  let schoolId = user.schoolId else { return }
-
-            Task {
-                do {
-                    let response: StudentsResponse = try await api.get(
-                        "/students",
-                        query: ["schoolId": schoolId, "pageSize": "500"],
-                        as: StudentsResponse.self
-                    )
-
-                    await MainActor.run {
-                        for student in response.data {
-                            let studentId = student.id
-                            let descriptor = FetchDescriptor<StudentModel>(
-                                predicate: #Predicate { $0.id == studentId }
-                            )
-
-                            if let existing = try? context.fetch(descriptor).first {
-                                existing.update(from: student)
-                                existing.lastSyncedAt = Date()
-                            } else {
-                                let model = StudentModel(from: student, schoolId: schoolId)
-                                model.lastSyncedAt = Date()
-                                context.insert(model)
-                            }
-                        }
-
-                        try? context.save()
-                        updateSyncMetadata(entityType: "students", context: context)
-                    }
-                } catch {
-                    // Non-critical — will retry on next sync
-                }
-            }
+            upsertStudents(response.data, schoolId: context.schoolId)
+            updateSyncMetadata("students")
+            return nil
+        } catch {
+            logger.error("syncStudents failed: \(error.localizedDescription, privacy: .public)")
+            return .entity(.students, error)
         }
     }
 
-    private func syncAttendance() async {
-        await MainActor.run {
-            let context = DataContainer.shared.modelContext
-
-            let userDescriptor = FetchDescriptor<UserModel>(
-                sortBy: [SortDescriptor(\.lastSyncedAt, order: .reverse)]
+    private func syncConversations(context: SyncContext) async -> SyncError? {
+        do {
+            let response: ConversationsResponse = try await api.get(
+                "/mobile/conversations",
+                as: ConversationsResponse.self
             )
-            guard let user = try? context.fetch(userDescriptor).first,
-                  let schoolId = user.schoolId else { return }
-
-            Task {
-                do {
-                    // Fetch last 30 days of attendance
-                    let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-                    let dateFrom = ISO8601DateFormatter().string(from: thirtyDaysAgo)
-
-                    let response: AttendanceResponse = try await api.get(
-                        "/attendance",
-                        query: [
-                            "schoolId": schoolId,
-                            "dateFrom": dateFrom,
-                            "pageSize": "500"
-                        ],
-                        as: AttendanceResponse.self
-                    )
-
-                    await MainActor.run {
-                        for record in response.data {
-                            let recordId = record.id
-                            let descriptor = FetchDescriptor<AttendanceModel>(
-                                predicate: #Predicate { $0.id == recordId }
-                            )
-
-                            if let existing = try? context.fetch(descriptor).first {
-                                existing.update(from: record)
-                                existing.lastSyncedAt = Date()
-                            } else {
-                                let model = AttendanceModel(from: record, schoolId: schoolId)
-                                model.lastSyncedAt = Date()
-                                context.insert(model)
-                            }
-                        }
-
-                        try? context.save()
-                        updateSyncMetadata(entityType: "attendance", context: context)
-                    }
-                } catch {
-                    // Non-critical — will retry on next sync
-                }
-            }
+            upsertConversations(response.data, schoolId: context.schoolId)
+            updateSyncMetadata("conversations")
+            return nil
+        } catch {
+            logger.error("syncConversations failed: \(error.localizedDescription, privacy: .public)")
+            return .entity(.conversations, error)
         }
     }
 
-    private func syncGrades() async {
-        await MainActor.run {
-            let context = DataContainer.shared.modelContext
-
-            let userDescriptor = FetchDescriptor<UserModel>(
-                sortBy: [SortDescriptor(\.lastSyncedAt, order: .reverse)]
+    private func syncNotifications(context: SyncContext) async -> SyncError? {
+        do {
+            let response: NotificationsResponse = try await api.get(
+                "/mobile/notifications",
+                query: ["per_page": "100"],
+                as: NotificationsResponse.self
             )
-            guard let user = try? context.fetch(userDescriptor).first,
-                  let schoolId = user.schoolId else { return }
-
-            Task {
-                do {
-                    let response: ExamResultsResponse = try await api.get(
-                        "/grades/results",
-                        query: ["schoolId": schoolId, "pageSize": "500"],
-                        as: ExamResultsResponse.self
-                    )
-
-                    await MainActor.run {
-                        for result in response.data {
-                            let resultId = result.id
-                            let descriptor = FetchDescriptor<ExamResultModel>(
-                                predicate: #Predicate { $0.id == resultId }
-                            )
-
-                            if let existing = try? context.fetch(descriptor).first {
-                                existing.update(from: result)
-                                existing.lastSyncedAt = Date()
-                            } else {
-                                let model = ExamResultModel(from: result, schoolId: schoolId)
-                                model.lastSyncedAt = Date()
-                                context.insert(model)
-                            }
-                        }
-
-                        try? context.save()
-                        updateSyncMetadata(entityType: "grades", context: context)
-                    }
-                } catch {
-                    // Non-critical — will retry on next sync
-                }
-            }
+            upsertNotifications(response.data, schoolId: context.schoolId)
+            updateSyncMetadata("notifications")
+            return nil
+        } catch {
+            logger.error("syncNotifications failed: \(error.localizedDescription, privacy: .public)")
+            return .entity(.notifications, error)
         }
     }
 
-    private func syncMessages() async {
-        // Fetch recent conversations and cache in SwiftData
-        await MainActor.run {
-            let context = DataContainer.shared.modelContext
+    // MARK: - SwiftData upserts
 
-            // Get schoolId from most recent user
-            let userDescriptor = FetchDescriptor<UserModel>(
-                sortBy: [SortDescriptor(\.lastSyncedAt, order: .reverse)]
+    private func upsertStudents(_ students: [Student], schoolId: String) {
+        for student in students {
+            let id = student.id
+            let descriptor = FetchDescriptor<StudentModel>(
+                predicate: #Predicate { $0.id == id }
             )
-            guard let user = try? context.fetch(userDescriptor).first,
-                  let schoolId = user.schoolId else { return }
-
-            Task {
-                do {
-                    let conversations: [Conversation] = try await api.get(
-                        "/conversations",
-                        query: ["schoolId": schoolId],
-                        as: [Conversation].self
-                    )
-
-                    await MainActor.run {
-                        for conv in conversations {
-                            let convId = conv.id
-                            let descriptor = FetchDescriptor<ConversationModel>(
-                                predicate: #Predicate { $0.id == convId }
-                            )
-
-                            if let existing = try? context.fetch(descriptor).first {
-                                existing.name = conv.name
-                                existing.updatedAt = conv.updatedAt
-                                existing.lastSyncedAt = Date()
-                            } else {
-                                let model = ConversationModel(id: conv.id, schoolId: schoolId)
-                                model.name = conv.name
-                                model.isGroup = conv.isGroup
-                                model.lastSyncedAt = Date()
-                                context.insert(model)
-                            }
-                        }
-
-                        try? context.save()
-                        updateSyncMetadata(entityType: "messages", context: context)
-                    }
-                } catch {
-                    // Non-critical — will retry on next sync
-                }
+            if let existing = try? modelContext.fetch(descriptor).first {
+                existing.update(from: student)
+                existing.lastSyncedAt = .now
+            } else {
+                let model = StudentModel(from: student, schoolId: schoolId)
+                model.lastSyncedAt = .now
+                modelContext.insert(model)
             }
         }
+        try? modelContext.save()
     }
 
-    private func syncNotifications() async {
-        // Fetch recent notifications and cache in SwiftData
-        await MainActor.run {
-            let context = DataContainer.shared.modelContext
-
-            // Get schoolId from most recent user
-            let userDescriptor = FetchDescriptor<UserModel>(
-                sortBy: [SortDescriptor(\.lastSyncedAt, order: .reverse)]
+    private func upsertConversations(_ conversations: [Conversation], schoolId: String) {
+        for conv in conversations {
+            let id = conv.id
+            let descriptor = FetchDescriptor<ConversationModel>(
+                predicate: #Predicate { $0.id == id }
             )
-            guard let user = try? context.fetch(userDescriptor).first,
-                  let schoolId = user.schoolId else { return }
-
-            Task {
-                do {
-                    let notifications: [AppNotification] = try await api.get(
-                        "/notifications",
-                        query: ["schoolId": schoolId],
-                        as: [AppNotification].self
-                    )
-
-                    await MainActor.run {
-                        for notif in notifications {
-                            let notifId = notif.id
-                            let descriptor = FetchDescriptor<NotificationModel>(
-                                predicate: #Predicate { $0.id == notifId }
-                            )
-
-                            if let existing = try? context.fetch(descriptor).first {
-                                existing.isRead = notif.isRead
-                                existing.lastSyncedAt = Date()
-                            } else {
-                                let model = NotificationModel(
-                                    id: notif.id,
-                                    userId: notif.userId,
-                                    type: notif.type,
-                                    title: notif.title,
-                                    message: notif.message,
-                                    schoolId: schoolId
-                                )
-                                model.isRead = notif.isRead
-                                model.lastSyncedAt = Date()
-                                context.insert(model)
-                            }
-                        }
-
-                        try? context.save()
-                        updateSyncMetadata(entityType: "notifications", context: context)
-                    }
-                } catch {
-                    // Non-critical — will retry on next sync
-                }
+            if let existing = try? modelContext.fetch(descriptor).first {
+                existing.name = conv.name
+                existing.updatedAt = conv.updatedAt
+                existing.lastSyncedAt = .now
+            } else {
+                let model = ConversationModel(id: conv.id, schoolId: schoolId)
+                model.name = conv.name
+                model.isGroup = conv.isGroup
+                model.lastSyncedAt = .now
+                modelContext.insert(model)
             }
         }
+        try? modelContext.save()
     }
-    // MARK: - Sync Metadata Helper
 
-    @MainActor
-    private func updateSyncMetadata(entityType: String, context: ModelContext) {
+    private func upsertNotifications(_ notifications: [AppNotification], schoolId: String) {
+        for notif in notifications {
+            let id = notif.id
+            let descriptor = FetchDescriptor<NotificationModel>(
+                predicate: #Predicate { $0.id == id }
+            )
+            if let existing = try? modelContext.fetch(descriptor).first {
+                existing.isRead = notif.isRead
+                existing.lastSyncedAt = .now
+            } else {
+                let model = NotificationModel(
+                    id: notif.id,
+                    userId: notif.userId,
+                    type: notif.type,
+                    title: notif.title,
+                    message: notif.message,
+                    schoolId: schoolId
+                )
+                model.isRead = notif.isRead
+                model.lastSyncedAt = .now
+                modelContext.insert(model)
+            }
+        }
+        try? modelContext.save()
+    }
+
+    // MARK: - Sync metadata
+
+    private func updateSyncMetadata(_ entityType: String) {
         let descriptor = FetchDescriptor<SyncMetadata>(
             predicate: #Predicate { $0.entityType == entityType }
         )
 
-        if let existing = try? context.fetch(descriptor).first {
-            existing.lastSyncedAt = Date()
+        if let existing = try? modelContext.fetch(descriptor).first {
+            existing.lastSyncedAt = .now
             existing.syncVersion += 1
         } else {
             let metadata = SyncMetadata(entityType: entityType)
-            metadata.lastSyncedAt = Date()
+            metadata.lastSyncedAt = .now
             metadata.syncVersion = 1
-            context.insert(metadata)
+            modelContext.insert(metadata)
         }
-
-        try? context.save()
+        try? modelContext.save()
     }
 }
 
 // MARK: - Supporting Types
 
-enum EntityType {
+private struct SyncContext {
+    let userId: String
+    let schoolId: String
+}
+
+/// Entities the sync engine knows how to refresh on demand.
+enum SyncableEntity: Sendable {
     case students
-    case attendance
-    case grades
-    case messages
+    case conversations
     case notifications
 }
 
-extension Notification.Name {
-    static let syncCompleted = Notification.Name("syncCompleted")
-}
+/// Typed error so callers can react (e.g. show retry CTA per entity).
+enum SyncError: Error, Sendable, CustomStringConvertible {
+    case offline
+    case noUser
+    case entity(SyncableEntity, Error)
 
-// For encoding Data in API requests
-extension Data: Encodable {
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(self.base64EncodedString())
+    var description: String {
+        switch self {
+        case .offline: return "offline"
+        case .noUser: return "no-user"
+        case .entity(let entity, let error): return "\(entity)-failed: \(error.localizedDescription)"
+        }
     }
 }
+
+// `Logger.sync` is declared in `core/extensions/logger-extension.swift`.

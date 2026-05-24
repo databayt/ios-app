@@ -1,9 +1,11 @@
 name: Hogwarts
 options:
   bundleIdPrefix: org.databayt
+  # iOS 18 is the minimum so teachers/parents on a year-old device still
+  # qualify; iOS 26 features are gated behind @available(iOS 26, *).
   deploymentTarget:
     iOS: "18.0"
-  xcodeVersion: "15.0"
+  xcodeVersion: "26.0"
   generateEmptyDirectories: true
   groupSortPosition: top
 
@@ -11,7 +13,15 @@ settings:
   base:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
-    SWIFT_VERSION: "6.0"
+    # Swift 6.2 + Xcode 26 "approachable concurrency": the language mode
+    # turns warnings into errors, MainActor is the default isolation, and
+    # the two upcoming features below close the remaining holes that the
+    # 6.0 migration left behind.
+    SWIFT_VERSION: "6.2"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_UPCOMING_FEATURE_NonisolatedNonsendingByDefault: YES
+    SWIFT_UPCOMING_FEATURE_InferSendableFromCaptures: YES
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
@@ -50,6 +60,11 @@ targets:
         CFBundleName: Hogwarts
         CFBundleShortVersionString: "1.0.0"
         CFBundleVersion: "1"
+        CFBundleDevelopmentRegion: ar
+        CFBundleAllowMixedLocalizations: true
+        CFBundleLocalizations:
+          - ar
+          - en
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -61,6 +76,9 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSCameraUsageDescription: "Camera access is needed for QR code attendance check-in"
+        NSPhotoLibraryUsageDescription: "Photo library access is needed to attach documents to admission applications and profile photos."
+        NSPhotoLibraryAddUsageDescription: "Save shared documents (ID cards, receipts, report cards) to your photo library."
+        NSCalendarsWriteOnlyAccessUsageDescription: "Allow Hogwarts to add school events to your calendar."
         ITSAppUsesNonExemptEncryption: false
         GIDClientID: "GOOGLE_CLIENT_ID"
         CFBundleURLTypes:

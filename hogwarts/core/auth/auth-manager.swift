@@ -6,8 +6,23 @@ import AuthenticationServices
 @Observable
 @MainActor
 final class AuthManager {
-    private let keychain = KeychainService()
-    private let api = APIClient.shared
+    private let keychain: KeychainServicing
+    private let api: APIClientProtocol
+    private let profile: ProfileActions
+
+    /// Default-arg init: production code is unchanged (`AuthManager()`),
+    /// tests can inject a `MockAPIClient` + an in-memory keychain to drive
+    /// `restoreSession`, refresh, and sign-in/out flows deterministically.
+    init(
+        keychain: KeychainServicing = KeychainService(),
+        api: APIClientProtocol = APIClient.shared,
+        profile: ProfileActions? = nil
+    ) {
+        self.keychain = keychain
+        self.api = api
+        self.profile = profile ?? ProfileActions(api: api)
+        Task { await wireAPIClient() }
+    }
 
     /// Current authenticated user
     var currentUser: User?
@@ -33,16 +48,20 @@ final class AuthManager {
         currentUser?.userRole ?? .user
     }
 
-    init() {
-        Task { await wireUnauthorizedHandler() }
-    }
-
-    /// Wire up 401 handler on APIClient
-    private func wireUnauthorizedHandler() async {
+    /// Wire both callbacks on `APIClient`:
+    ///   - 401 → sign out
+    ///   - auth header → always read the current access token so a refresh
+    ///     issued mid-flight is picked up on the next request without the
+    ///     client having to round-trip through the keychain.
+    private func wireAPIClient() async {
         await api.setOnUnauthorized { [weak self] in
-            await MainActor.run {
-                self?.handleUnauthorized()
-            }
+            await MainActor.run { self?.handleUnauthorized() }
+        }
+        await api.setAuthorizationProvider { [weak self] in
+            // `self` is @MainActor — reading `accessToken` from a nonisolated
+            // `@Sendable` closure is safe because it just delegates to the
+            // keychain, which is thread-safe.
+            self?.keychain.get(.accessToken)
         }
     }
 
@@ -58,36 +77,7 @@ final class AuthManager {
     func signIn(email: String, password: String) async throws -> Session {
         let request = SignInRequest(email: email, password: password)
 
-        // Mock data for demo/testing (when backend is unavailable)
-        if password == "1234" {
-            let mockUser = User(
-                id: UUID().uuidString,
-                email: email,
-                name: email.split(separator: "@").first.map(String.init) ?? "User",
-                nameAr: nil,
-                role: "student",
-                schoolId: "demo-school",
-                imageUrl: nil,
-                phone: nil,
-                emailVerified: Date(),
-                isTwoFactorEnabled: false,
-                createdAt: Date(),
-                updatedAt: Date()
-            )
-
-            let mockSession = Session(
-                user: mockUser,
-                schoolId: "demo-school",
-                accessToken: "mock_token_\(UUID().uuidString)",
-                refreshToken: nil,
-                expiresAt: Date().addingTimeInterval(86400)
-            )
-
-            try saveSession(mockSession)
-            return mockSession
-        }
-
-        let session = try await api.post("/auth/signin", body: request, as: Session.self)
+        let session = try await api.post("/mobile/auth", body: request, as: Session.self)
 
         try saveSession(session)
         return session
@@ -96,8 +86,8 @@ final class AuthManager {
     /// Sign in with Google
     /// Mirrors: signIn("google") in NextAuth
     func signInWithGoogle(idToken: String) async throws -> Session {
-        let request = OAuthSignInRequest(provider: "google", token: idToken)
-        let session = try await api.post("/auth/callback/google", body: request, as: Session.self)
+        let request = GoogleSignInRequest(idToken: idToken)
+        let session = try await api.post("/mobile/auth/google", body: request, as: Session.self)
 
         try saveSession(session)
         return session
@@ -106,8 +96,8 @@ final class AuthManager {
     /// Sign in with Facebook
     /// Mirrors: signIn("facebook") in NextAuth
     func signInWithFacebook(accessToken: String) async throws -> Session {
-        let request = OAuthSignInRequest(provider: "facebook", token: accessToken)
-        let session = try await api.post("/auth/callback/facebook", body: request, as: Session.self)
+        let request = FacebookSignInRequest(accessToken: accessToken)
+        let session = try await api.post("/mobile/auth/facebook", body: request, as: Session.self)
 
         try saveSession(session)
         return session
@@ -121,8 +111,17 @@ final class AuthManager {
             throw AuthError.invalidCredentials
         }
 
-        let request = OAuthSignInRequest(provider: "apple", token: tokenString)
-        let session = try await api.post("/auth/callback/apple", body: request, as: Session.self)
+        let givenName = credential.fullName?.givenName
+        let familyName = credential.fullName?.familyName
+        let authCode: String? = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
+
+        let request = AppleSignInRequest(
+            identityToken: tokenString,
+            authorizationCode: authCode,
+            givenName: givenName,
+            familyName: familyName
+        )
+        let session = try await api.post("/mobile/auth/apple", body: request, as: Session.self)
 
         try saveSession(session)
         return session
@@ -142,54 +141,108 @@ final class AuthManager {
         self.sessionState = .authenticated
     }
 
-    /// Restore session on app launch
-    /// Validates cached token, refreshes if near expiry, clears if expired
+    /// Restore session on app launch.
+    /// Steps:
+    ///   1. Validate cached JWT — sign out if missing or malformed.
+    ///   2. Refresh if expired or near expiry.
+    ///   3. Fetch the real profile from `/mobile/profile` so cached data
+    ///      like `nameAr`, `phone`, `imageUrl` is hydrated. Falls back to
+    ///      a JWT-derived stub so the app still works offline on cold launch.
     func restoreSession() async {
         guard let token = accessToken else {
             sessionState = .unauthenticated
             return
         }
 
-        // Decode JWT to check expiry
-        if let payload = TokenPayload.decode(from: token) {
-            if payload.isExpired {
-                // Token expired — try refresh
-                do {
-                    try await refreshToken()
-                    return
-                } catch {
-                    signOut()
-                    return
-                }
-            }
-
-            if payload.shouldRefresh() {
-                // Token near expiry — proactive refresh
-                try? await refreshToken()
-            }
+        guard let payload = TokenPayload.decode(from: token) else {
+            signOut()
+            return
         }
 
-        // Token still valid — fetch session from server
+        if payload.isExpired {
+            do {
+                try await refreshToken()
+            } catch {
+                signOut()
+                return
+            }
+            // refreshToken() rewrote keychain + currentUser via saveSession.
+            await hydrateProfile(schoolIdFallback: payload.schoolId)
+            return
+        }
+
+        if payload.shouldRefresh() {
+            try? await refreshToken()
+        }
+
+        // Stop-gap: install the JWT stub so `isAuthenticated` flips immediately
+        // and the UI can render. The network fetch below upgrades it in place.
+        installStub(from: payload, token: token)
+        await hydrateProfile(schoolIdFallback: payload.schoolId)
+    }
+
+    /// Pull the canonical `User` from the API. Silent on failure: the
+    /// stub session installed by `installStub` keeps the app usable when
+    /// offline, and the next foreground / pull-to-refresh tries again.
+    private func hydrateProfile(schoolIdFallback: String?) async {
+        let token = accessToken
+        guard let schoolId = session?.schoolId ?? schoolIdFallback else { return }
         do {
-            let session = try await api.get("/auth/session", as: Session.self)
-            self.session = session
-            self.currentUser = session.user
-            self.sessionState = .authenticated
+            let user = try await profile.getProfile(schoolId: schoolId)
+            self.currentUser = user
+            // Keep tokens; only replace the user on a successful fetch.
+            if let token {
+                self.session = Session(
+                    user: user,
+                    schoolId: schoolId,
+                    accessToken: token,
+                    refreshToken: keychain.get(.refreshToken),
+                    expiresAt: session?.expiresAt
+                )
+            }
         } catch {
-            signOut()
+            // Offline or transient — keep the stub session, don't sign out.
         }
     }
 
+    /// Materialize a minimal `User` from JWT claims so the UI doesn't
+    /// flash login while the real profile is being fetched.
+    private func installStub(from payload: TokenPayload, token: String) {
+        let stub = User(
+            id: payload.sub,
+            email: payload.email ?? "",
+            name: payload.name ?? payload.email ?? "",
+            nameAr: nil,
+            role: payload.role ?? "student",
+            schoolId: payload.schoolId ?? "",
+            imageUrl: nil,
+            phone: nil,
+            emailVerified: .now,
+            isTwoFactorEnabled: false,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let stubSession = Session(
+            user: stub,
+            schoolId: payload.schoolId,
+            accessToken: token,
+            refreshToken: keychain.get(.refreshToken),
+            expiresAt: payload.exp
+        )
+        self.session = stubSession
+        self.currentUser = stub
+        self.sessionState = .authenticated
+    }
+
     /// Refresh the access token using the refresh token
+    /// Web API expects PUT /mobile/auth with X-Refresh-Token header
     func refreshToken() async throws {
         guard let refresh = keychain.get(.refreshToken) else {
             throw AuthError.refreshFailed
         }
 
-        let request = RefreshTokenRequest(refreshToken: refresh)
-
         do {
-            let session = try await api.post("/auth/refresh", body: request, as: Session.self)
+            let session = try await api.refreshAuth(refreshToken: refresh)
             try saveSession(session)
         } catch {
             throw AuthError.refreshFailed

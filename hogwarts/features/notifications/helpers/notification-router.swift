@@ -66,12 +66,21 @@ struct NotificationRouter {
 
 // MARK: - Navigation State
 
-/// Observable navigation state for deep linking from notifications
+/// Observable navigation state for deep linking from notifications.
+///
+/// Singleton + `@Observable` so:
+///   - The UIKit `AppDelegate` can call `shared.handlePushNotification(_:)`
+///     directly when a push lands, with no `NotificationCenter` bridge.
+///   - SwiftUI views read it via `@Environment` and react to mutations.
 @Observable
 @MainActor
 final class NotificationNavigationState {
+    static let shared = NotificationNavigationState()
+
     var selectedTab: AppTab = .dashboard
     var pendingDestination: NotificationRouter.Destination?
+
+    private init() {}
 
     /// Handle a notification tap
     func navigate(to destination: NotificationRouter.Destination) {
@@ -91,6 +100,14 @@ final class NotificationNavigationState {
         case .dashboard:
             selectedTab = .dashboard
             pendingDestination = nil
+        }
+    }
+
+    /// Entry point for push notifications. Parses the userInfo dict into a
+    /// typed `Destination` and routes — no `NotificationCenter` round-trip.
+    func handlePushNotification(_ userInfo: [AnyHashable: Any]) {
+        if let destination = NotificationRouter.destination(from: userInfo) {
+            navigate(to: destination)
         }
     }
 

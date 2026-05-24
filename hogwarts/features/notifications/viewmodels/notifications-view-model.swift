@@ -23,8 +23,10 @@ final class NotificationsViewModel {
     var successMessage: String?
     var showSuccess = false
 
-    // Push notification observer
-    nonisolated(unsafe) private var notificationObserver: NSObjectProtocol?
+    // Push notifications no longer flow through `NotificationCenter`; the
+    // AppDelegate routes them straight into `NotificationNavigationState`,
+    // and screens reload via pull-to-refresh / SyncEngine. Removed the
+    // dead observer + the `nonisolated(unsafe)` field that backed it.
 
     // MARK: - Computed Properties
 
@@ -72,7 +74,6 @@ final class NotificationsViewModel {
     func setup(tenantContext: TenantContext, authManager: AuthManager) {
         self.tenantContext = tenantContext
         self.authManager = authManager
-        observePushNotifications()
     }
 
     // MARK: - Load Actions
@@ -168,50 +169,16 @@ final class NotificationsViewModel {
         }
     }
 
-    /// Delete a notification
+    /// Delete a notification — NOT AVAILABLE in web mobile API
+    /// Mark as read instead (web API only supports read, not delete)
     func deleteNotification(_ notification: AppNotification) async {
-        guard let schoolId = tenantContext?.schoolId else { return }
-
-        do {
-            try await actions.deleteNotification(
-                notificationId: notification.id,
-                schoolId: schoolId
-            )
-
-            // Remove from local state
-            if case .loaded(var list) = viewState {
-                list.removeAll { $0.id == notification.id }
-                viewState = list.isEmpty ? .empty : .loaded(list)
-            }
-        } catch {
-            self.error = error
-            showError = true
-        }
+        // Fall back to marking as read since delete is not available
+        await markAsRead(notification)
     }
 
     /// Set active filter
     func setFilter(_ filter: NotificationFilter) {
         activeFilter = filter
-    }
-
-    // MARK: - Push Notification Observer
-
-    private func observePushNotifications() {
-        notificationObserver = NotificationCenter.default.addObserver(
-            forName: .didReceiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { [weak self] in
-                await self?.loadNotifications()
-            }
-        }
-    }
-
-    deinit {
-        if let observer = notificationObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
     }
 
     // MARK: - SwiftData Cache

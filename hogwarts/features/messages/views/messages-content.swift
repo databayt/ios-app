@@ -66,6 +66,23 @@ struct MessagesContent: View {
             }
             .navigationTitle(String(localized: "messages.title"))
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        NavigationLink {
+                            StarredMessagesView()
+                        } label: {
+                            Label(String(localized: "starred.title"), systemImage: "star")
+                        }
+                        NavigationLink {
+                            ContactsView()
+                        } label: {
+                            Label(String(localized: "contacts.title"), systemImage: "person.2")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel(Text("messages.menu.a11y"))
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     if viewModel.capabilities.canCreateConversations {
                         Button {

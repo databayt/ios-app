@@ -191,10 +191,10 @@ struct YearLevel: Codable, Identifiable, Hashable {
 }
 
 /// Paginated students response
+/// Web API: GET /mobile/students → {data, total, page, per_page}
 struct StudentsResponse: Codable {
     let data: [Student]
     let total: Int
     let page: Int
-    let pageSize: Int
-    let totalPages: Int
+    let perPage: Int
 }

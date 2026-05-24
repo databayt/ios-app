@@ -6,14 +6,63 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel older in-flight runs on the same ref so PR pushes don't queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  XCODE: /Applications/Xcode_26.app
+  SCHEME: Hogwarts
+  DESTINATION: 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4'
+  RESULT_BUNDLE: build/Hogwarts.xcresult
+
 jobs:
-  build-and-test:
+  lint:
+    name: SwiftLint
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Run SwiftLint (strict)
+        run: swiftlint --strict --reporter github-actions-logging
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
+  build-and-test:
+    name: Build & Test
+    runs-on: macos-15
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: sudo xcode-select -s "$XCODE"
+
+      # Cache derived data — biggest single CI speedup. The hash key
+      # invalidates when project.yml or any Swift source changes.
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode26-derived-${{ hashFiles('project.yml', 'hogwarts/**/*.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode26-derived-
+
+      - name: Cache SPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Generate Xcode project
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          brew list xcbeautify >/dev/null 2>&1 || brew install xcbeautify
+          xcodegen generate
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -26,23 +75,84 @@ jobs:
 
       - name: Build
         run: |
+          set -o pipefail
           xcodebuild build \
-            -scheme Hogwarts \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
-            -skipPackagePluginValidation
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -enableCodeCoverage YES \
+            -resultBundlePath "$RESULT_BUNDLE" \
+            -skipPackagePluginValidation \
+          | xcbeautify
 
       - name: Unit Tests
         run: |
+          set -o pipefail
           xcodebuild test \
-            -scheme Hogwarts \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
             -only-testing:HogwartsTests \
-            -skipPackagePluginValidation
+            -enableCodeCoverage YES \
+            -resultBundlePath "$RESULT_BUNDLE" \
+            -skipPackagePluginValidation \
+          | xcbeautify
 
       - name: UI Tests
         run: |
+          set -o pipefail
           xcodebuild test \
-            -scheme Hogwarts \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
             -only-testing:HogwartsUITests \
-            -skipPackagePluginValidation
+            -skipPackagePluginValidation \
+          | xcbeautify
+
+      - name: Export coverage report
+        if: always()
+        run: |
+          xcrun xccov view --report --json "$RESULT_BUNDLE" > coverage.json
+          xcrun xccov view --report "$RESULT_BUNDLE" | head -50
+
+      - name: Upload xcresult
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: ${{ env.RESULT_BUNDLE }}
+          retention-days: 7
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.json
+          fail_ci_if_error: false
+
+  archive:
+    name: Archive (release config)
+    runs-on: macos-15
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo xcode-select -s /Applications/Xcode_26.app
+      - name: Generate Xcode project
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          brew list xcbeautify >/dev/null 2>&1 || brew install xcbeautify
+          xcodegen generate
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -scheme Hogwarts \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Hogwarts.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+          | xcbeautify
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hogwarts.xcarchive
+          path: build/Hogwarts.xcarchive
+          retention-days: 14

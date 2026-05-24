@@ -6,105 +6,115 @@ import Foundation
 /// CRITICAL: All actions must include schoolId for multi-tenant isolation
 final class MessagesActions: Sendable {
 
-    private let api = APIClient.shared
+    private let api: APIClientProtocol
     private let syncEngine = SyncEngine.shared
+
+    init(api: APIClientProtocol = APIClient.shared) {
+        self.api = api
+    }
 
     // MARK: - Read Actions
 
     /// Get conversations list
-    /// GET /conversations?schoolId=X
-    func getConversations(schoolId: String) async throws -> [Conversation] {
-        try await api.get(
-            "/conversations",
-            query: ["schoolId": schoolId],
-            as: [Conversation].self
+    /// Web API: GET /mobile/conversations?type=X
+    /// Returns: {data: [{id, type, title, avatarUrl, unreadCount, ...}], total}
+    /// NOTE: This endpoint returns camelCase field names directly
+    func getConversations(
+        schoolId: String,
+        type: String? = nil
+    ) async throws -> ConversationsResponse {
+        var params: [String: String] = [:]
+        if let type { params["type"] = type }
+
+        return try await api.get(
+            "/mobile/conversations",
+            query: params,
+            as: ConversationsResponse.self
         )
     }
 
-    /// Get messages in a conversation (paginated)
-    /// GET /conversations/{id}/messages?schoolId=X&page=N
+    /// Get messages in a conversation (cursor-based pagination)
+    /// Web API: GET /mobile/conversations/{id}/messages?cursor=X&limit=N
+    /// Returns: {data: [...], next_cursor}
     func getMessages(
         conversationId: String,
         schoolId: String,
-        page: Int = 1
+        cursor: String? = nil,
+        limit: Int = 20
     ) async throws -> MessagesResponse {
-        try await api.get(
-            "/conversations/\(conversationId)/messages",
-            query: [
-                "schoolId": schoolId,
-                "page": String(page)
-            ],
+        var params: [String: String] = [
+            "limit": String(limit)
+        ]
+        if let cursor { params["cursor"] = cursor }
+
+        return try await api.get(
+            "/mobile/conversations/\(conversationId)/messages",
+            query: params,
             as: MessagesResponse.self
         )
     }
 
     // MARK: - Write Actions
 
-    /// Send a message
-    /// POST /messages
+    /// Send a message in a conversation
+    /// Web API: POST /mobile/conversations/{conversationId}/messages
+    /// Body: {content, reply_to_id?, nonce?}
     func sendMessage(
         conversationId: String,
         content: String,
+        replyToId: String? = nil,
+        nonce: String? = nil,
         schoolId: String
     ) async throws -> Message {
-        let request = SendMessageRequest(
-            conversationId: conversationId,
-            content: content,
-            schoolId: schoolId
+        struct SendRequest: Encodable {
+            let content: String
+            let replyToId: String?
+            let nonce: String?
+        }
+
+        let body = SendRequest(content: content, replyToId: replyToId, nonce: nonce)
+        return try await api.post(
+            "/mobile/conversations/\(conversationId)/messages",
+            body: body,
+            as: Message.self
         )
-        return try await api.post("/messages", body: request, as: Message.self)
     }
 
     /// Create a new conversation
-    /// POST /conversations
+    /// Web API: POST /mobile/conversations
+    /// Body: {type?, title?, participant_ids: [...]}
+    /// Returns: {id}
     func createConversation(
         participantIds: [String],
-        name: String? = nil,
-        isGroup: Bool = false,
-        initialMessage: String? = nil,
+        type: String? = nil,
+        title: String? = nil,
         schoolId: String
-    ) async throws -> Conversation {
-        let request = CreateConversationRequest(
-            participantIds: participantIds,
-            name: name,
-            isGroup: isGroup,
-            initialMessage: initialMessage,
-            schoolId: schoolId
-        )
-        return try await api.post("/conversations", body: request, as: Conversation.self)
+    ) async throws -> CreateConversationResponse {
+        struct CreateRequest: Encodable {
+            let type: String?
+            let title: String?
+            let participantIds: [String]
+        }
+
+        let body = CreateRequest(type: type, title: title, participantIds: participantIds)
+        return try await api.post("/mobile/conversations", body: body, as: CreateConversationResponse.self)
     }
 
-    /// Mark message as read
-    /// PUT /messages/{id}/read
+    /// Mark conversation as read
+    /// Web API: POST /mobile/conversations/{conversationId}/read
     func markAsRead(
-        messageId: String,
+        conversationId: String,
         schoolId: String
     ) async throws {
-        let request = MarkReadRequest(schoolId: schoolId)
-        let _: EmptyResponse = try await api.put(
-            "/messages/\(messageId)/read",
-            body: request
+        struct EmptyBody: Encodable {}
+        let _: EmptyResponse = try await api.post(
+            "/mobile/conversations/\(conversationId)/read",
+            body: EmptyBody()
         )
     }
 
-    /// Get available recipients for new conversation
-    /// GET /users?schoolId=X&role=Y
-    func getRecipients(
-        schoolId: String,
-        role: String? = nil,
-        search: String? = nil
-    ) async throws -> [Recipient] {
-        var params: [String: String] = ["schoolId": schoolId]
-
-        if let role {
-            params["role"] = role
-        }
-        if let search, !search.isEmpty {
-            params["search"] = search
-        }
-
-        return try await api.get("/users", query: params, as: [Recipient].self)
-    }
+    // NOTE: /mobile/users and /mobile/contacts do not exist as mobile API
+    // endpoints. Recipients for conversations are handled via conversation creation.
 
     // MARK: - Offline Actions
 
@@ -124,14 +134,13 @@ final class MessagesActions: Sendable {
         }
 
         // Queue for later
-        let request = SendMessageRequest(
-            conversationId: conversationId,
-            content: content,
-            schoolId: schoolId
-        )
+        struct OfflineMessageRequest: Encodable {
+            let content: String
+        }
+        let request = OfflineMessageRequest(content: content)
         let payload = try JSONEncoder().encode(request)
         await syncEngine.queueAction(
-            endpoint: "/messages",
+            endpoint: "/mobile/conversations/\(conversationId)/messages",
             method: .post,
             payload: payload
         )

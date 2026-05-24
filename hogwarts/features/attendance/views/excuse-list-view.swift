@@ -54,42 +54,17 @@ struct ExcuseListView: View {
 
     // MARK: - Actions
 
+    /// Load excuses — NOT AVAILABLE in web mobile API
+    /// Excuse management endpoints are not yet implemented
     private func loadExcuses() async {
-        guard let schoolId = tenantContext.schoolId else {
-            isLoading = false
-            return
-        }
-
-        do {
-            if canReview {
-                // Teacher/Admin sees pending excuses
-                excuses = try await actions.getPendingExcuses(schoolId: schoolId)
-            } else {
-                // Guardian sees their submitted excuses
-                let studentId = authManager.currentUser?.id ?? ""
-                excuses = try await actions.getStudentExcuses(
-                    studentId: studentId,
-                    schoolId: schoolId
-                )
-            }
-        } catch {
-            self.error = error
-        }
-
+        // Excuse endpoints not available in web mobile API
+        excuses = []
         isLoading = false
     }
 
+    /// Review excuse — NOT AVAILABLE in web mobile API
     private func reviewExcuse(_ excuse: AttendanceExcuse, approved: Bool) async {
-        guard let schoolId = tenantContext.schoolId else { return }
-
-        let request = ExcuseReviewRequest(
-            excuseId: excuse.id,
-            status: approved ? "APPROVED" : "REJECTED",
-            reviewNotes: nil
-        )
-
-        _ = try? await actions.reviewExcuse(request, schoolId: schoolId)
-        await loadExcuses()
+        // Excuse review not available in web mobile API
     }
 }
 

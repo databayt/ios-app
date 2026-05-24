@@ -23,7 +23,7 @@ final class SchoolSelectionViewModel {
         defer { isLoading = false }
 
         do {
-            schools = try await api.get("/auth/schools", as: [School].self)
+            schools = try await api.get("/mobile/schools", as: [School].self)
         } catch {
             self.error = error
         }

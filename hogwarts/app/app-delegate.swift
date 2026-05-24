@@ -44,12 +44,14 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     // MARK: - Push Notifications
 
     private func registerForPushNotifications() {
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .badge, .sound]
-        ) { granted, error in
-            guard granted else { return }
-            DispatchQueue.main.async {
+        Task { @MainActor in
+            do {
+                let granted = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .badge, .sound])
+                guard granted else { return }
                 UIApplication.shared.registerForRemoteNotifications()
+            } catch {
+                Logger.app.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -93,20 +95,21 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        let type = response.notification.request.content.userInfo["type"] as? String
-        let id = response.notification.request.content.userInfo["id"] as? String
-        if let type {
-            await MainActor.run {
-                NotificationCenter.default.post(
-                    name: .didReceiveNotification,
-                    object: nil,
-                    userInfo: ["type": type, "id": id as Any]
-                )
-            }
+        // The notification's userInfo crosses an actor boundary — copy out
+        // the two strings we need on the nonisolated side, then hop to
+        // MainActor to mutate the router.
+        let userInfo = response.notification.request.content.userInfo
+        let type = userInfo["type"] as? String
+        let id = userInfo["id"] as? String
+        guard let type else { return }
+        await MainActor.run {
+            NotificationNavigationState.shared.handlePushNotification([
+                "type": type,
+                "id": id as Any
+            ])
         }
     }
 }
 
-extension Notification.Name {
-    static let didReceiveNotification = Notification.Name("didReceiveNotification")
-}
+// The old `.didReceiveNotification` NotificationCenter bridge is gone.
+// AppDelegate now flips `NotificationNavigationState.shared` directly.

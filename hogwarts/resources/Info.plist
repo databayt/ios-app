@@ -2,10 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>ar</string>
 	<key>CFBundleDisplayName</key>
 	<string>Hogwarts</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ar</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -42,6 +49,12 @@
 	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is needed for QR code attendance check-in</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save shared documents (ID cards, receipts, report cards) to your photo library.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>Allow Hogwarts to add school events to your calendar.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is needed to attach documents to admission applications and profile photos.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

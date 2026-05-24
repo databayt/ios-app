@@ -87,9 +87,13 @@ enum NotificationType: String, CaseIterable {
 }
 
 /// Notifications list response
+/// Web API: GET /mobile/notifications → {data, total, unread_count, page, per_page}
 struct NotificationsResponse: Codable {
     let data: [AppNotification]
     let total: Int
+    let unreadCount: Int?
+    let page: Int?
+    let perPage: Int?
 }
 
 // MARK: - View State

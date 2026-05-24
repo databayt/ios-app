@@ -98,6 +98,18 @@ struct LoginView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .disabled(!viewModel.canSubmit)
                         .accessibilityLabel(String(localized: "a11y.button.signIn"))
+
+                        // Forgot password link — pushes the 3-step reset flow
+                        // onto the surrounding NavigationStack.
+                        NavigationLink {
+                            ForgotPasswordView()
+                        } label: {
+                            Text(String(localized: "login.forgotPassword"))
+                                .font(.subheadline)
+                                .foregroundStyle(.tint)
+                                .padding(.top, 4)
+                        }
+                        .accessibilityHint(Text("a11y.button.forgotPassword"))
                     }
                     .padding(.horizontal)
 

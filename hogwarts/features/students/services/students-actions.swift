@@ -6,30 +6,34 @@ import Foundation
 /// CRITICAL: All actions must include schoolId for multi-tenant isolation
 final class StudentsActions: Sendable {
 
-    private let api = APIClient.shared
+    private let api: APIClientProtocol
     private let syncEngine = SyncEngine.shared
+
+    init(api: APIClientProtocol = APIClient.shared) {
+        self.api = api
+    }
 
     // MARK: - Read Actions
 
     /// Get students with filters and pagination
-    /// Mirrors: getStudents() server action
+    /// Web API: GET /mobile/students?search=X&section_id=Y&status=Z&page=N&per_page=N
     func getStudents(
         schoolId: String,
         filters: StudentFilters = StudentFilters()
     ) async throws -> StudentsResponse {
-        var params = filters.queryParams
-        params["schoolId"] = schoolId
+        let params = filters.queryParams
 
-        return try await api.get("/students", query: params, as: StudentsResponse.self)
+        return try await api.get("/mobile/students", query: params, as: StudentsResponse.self)
     }
 
     /// Get single student by ID
-    /// Mirrors: getStudent(id) server action
+    /// Web API: GET /mobile/students/{studentId}
     func getStudent(id: String, schoolId: String) async throws -> Student {
-        return try await api.get("/students/\(id)", query: ["schoolId": schoolId], as: Student.self)
+        return try await api.get("/mobile/students/\(id)", as: Student.self)
     }
 
-    /// Search students
+    /// Search students (uses the same list endpoint with search param)
+    /// Web API: GET /mobile/students?search=X&per_page=N
     func searchStudents(
         query: String,
         schoolId: String,
@@ -37,27 +41,18 @@ final class StudentsActions: Sendable {
     ) async throws -> [Student] {
         let params = [
             "search": query,
-            "schoolId": schoolId,
-            "pageSize": String(limit)
+            "per_page": String(limit)
         ]
 
-        let response = try await api.get("/students", query: params, as: StudentsResponse.self)
+        let response = try await api.get("/mobile/students", query: params, as: StudentsResponse.self)
         return response.data
-    }
-
-    /// Get year levels for a school
-    func getYearLevels(schoolId: String) async throws -> [YearLevel] {
-        return try await api.get(
-            "/year-levels",
-            query: ["schoolId": schoolId],
-            as: [YearLevel].self
-        )
     }
 
     // MARK: - Write Actions
 
     /// Create new student
-    /// Mirrors: createStudent() server action
+    /// Web API: POST /mobile/students
+    /// Body: {given_name, family_name, email, gender, section_id, date_of_birth}
     func createStudent(
         _ request: StudentCreateRequest,
         schoolId: String
@@ -76,18 +71,11 @@ final class StudentsActions: Sendable {
             throw StudentsError.validationFailed(validation.errors)
         }
 
-        // Create request with schoolId
-        struct CreateRequest: Encodable {
-            let student: StudentCreateRequest
-            let schoolId: String
-        }
-
-        let body = CreateRequest(student: request, schoolId: schoolId)
-        return try await api.post("/students", body: body, as: Student.self)
+        return try await api.post("/mobile/students", body: request, as: Student.self)
     }
 
-    /// Update student
-    /// Mirrors: updateStudent() server action
+    /// Update student (partial update)
+    /// Web API: PUT /mobile/students/{studentId}
     func updateStudent(
         id: String,
         _ request: StudentUpdateRequest,
@@ -106,20 +94,11 @@ final class StudentsActions: Sendable {
             throw StudentsError.validationFailed(validation.errors)
         }
 
-        struct UpdateRequest: Encodable {
-            let student: StudentUpdateRequest
-            let schoolId: String
-        }
-
-        let body = UpdateRequest(student: request, schoolId: schoolId)
-        return try await api.put("/students/\(id)", body: body, as: Student.self)
+        return try await api.put("/mobile/students/\(id)", body: request, as: Student.self)
     }
 
-    /// Delete student
-    /// Mirrors: deleteStudent() server action
-    func deleteStudent(id: String, schoolId: String) async throws {
-        try await api.delete("/students/\(id)?schoolId=\(schoolId)")
-    }
+    // NOTE: DELETE /mobile/students/{id} does not exist in the web API.
+    // Student deletion is an admin-only web operation.
 
     // MARK: - Offline Actions
 
@@ -137,7 +116,7 @@ final class StudentsActions: Sendable {
         // Queue for later
         let payload = try JSONEncoder().encode(request)
         await syncEngine.queueAction(
-            endpoint: "/students",
+            endpoint: "/mobile/students",
             method: .post,
             payload: payload
         )
@@ -156,16 +135,18 @@ final class StudentsActions: Sendable {
             return try await updateStudent(id: id, request, schoolId: schoolId)
         }
 
-        // Queue for later
         let payload = try JSONEncoder().encode(request)
         await syncEngine.queueAction(
-            endpoint: "/students/\(id)",
+            endpoint: "/mobile/students/\(id)",
             method: .put,
             payload: payload
         )
 
         return nil
     }
+
+    // NOTE: deleteStudent removed — DELETE /mobile/students/{id} does not
+    // exist in the web mobile API.
 }
 
 // MARK: - Errors

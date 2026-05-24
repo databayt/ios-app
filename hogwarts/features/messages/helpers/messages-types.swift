@@ -88,12 +88,11 @@ struct Message: Codable, Identifiable {
     }
 }
 
-/// Paginated messages response
+/// Cursor-based messages response
+/// Web API: GET /mobile/conversations/{id}/messages → {data, next_cursor}
 struct MessagesResponse: Codable {
     let data: [Message]
-    let total: Int
-    let page: Int
-    let totalPages: Int
+    let nextCursor: String?
 }
 
 /// Conversations list response
@@ -124,28 +123,19 @@ struct Recipient: Codable, Identifiable, Hashable {
     }
 }
 
+// MARK: - Response Types
+
+/// Create conversation response
+/// Web API: POST /mobile/conversations → {id}
+struct CreateConversationResponse: Codable {
+    let id: String
+}
+
 // MARK: - Request Types
 
-/// Send message request
-struct SendMessageRequest: Encodable {
-    let conversationId: String
-    let content: String
-    let schoolId: String
-}
-
-/// Create conversation request
-struct CreateConversationRequest: Encodable {
-    let participantIds: [String]
-    let name: String?
-    let isGroup: Bool
-    let initialMessage: String?
-    let schoolId: String
-}
-
-/// Mark message as read request
-struct MarkReadRequest: Encodable {
-    let schoolId: String
-}
+// NOTE: Send message and create conversation request bodies are now
+// defined inline in MessagesActions to match the exact web API shape.
+// Old SendMessageRequest, CreateConversationRequest, MarkReadRequest removed.
 
 // MARK: - View State
 

@@ -175,12 +175,24 @@ struct SyncEngineTests {
         #expect(!shouldDelay)
     }
 
-    // MARK: - EntityType
+    // MARK: - SyncableEntity
 
-    @Test("EntityType has all 5 cases")
-    func entityTypeCases() {
-        let cases: [EntityType] = [.students, .attendance, .grades, .messages, .notifications]
-        #expect(cases.count == 5)
+    /// SyncEngine now only refreshes the three reference-data entities;
+    /// attendance and grades are per-user and loaded on demand by feature
+    /// view models (which do their own offline-first cache reads).
+    @Test("SyncableEntity covers the three refresh-on-launch entities")
+    func syncableEntityCases() {
+        let cases: [SyncableEntity] = [.students, .conversations, .notifications]
+        #expect(cases.count == 3)
+    }
+
+    @Test("SyncError .entity description includes the underlying message")
+    func syncErrorDescription() {
+        struct Boom: LocalizedError {
+            var errorDescription: String? { "boom" }
+        }
+        let error = SyncError.entity(.students, Boom())
+        #expect(error.description.contains("boom"))
     }
 
     // MARK: - HTTPMethod Mapping

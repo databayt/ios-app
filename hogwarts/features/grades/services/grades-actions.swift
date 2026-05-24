@@ -11,146 +11,89 @@ final class GradesActions: Sendable {
 
     // MARK: - Read Actions
 
-    /// Get exams with filters and pagination
+    /// Get grades/results for a student (paginated)
+    /// Web API: GET /mobile/grades/student/{studentId}?page=N&per_page=N
+    /// Returns: {data: [{id, title, description, score, max_score, percentage,
+    ///   grade, feedback, submitted_at, graded_at, subject_name}], total, page, per_page}
+    func getStudentGrades(
+        studentId: String,
+        schoolId: String,
+        page: Int = 1,
+        perPage: Int = 20
+    ) async throws -> StudentGradesResponse {
+        let params: [String: String] = [
+            "page": String(page),
+            "per_page": String(perPage)
+        ]
+
+        return try await api.get(
+            "/mobile/grades/student/\(studentId)",
+            query: params,
+            as: StudentGradesResponse.self
+        )
+    }
+
+    /// Get grade summary for a student
+    /// Web API: GET /mobile/grades/summary/{studentId}
+    /// Returns: {total_results, average_percentage, gpa, overall_grade,
+    ///   rank, total_students, subjects: [...]}
+    func getStudentGradeSummary(
+        studentId: String,
+        schoolId: String
+    ) async throws -> GradeSummaryResponse {
+        return try await api.get(
+            "/mobile/grades/summary/\(studentId)",
+            as: GradeSummaryResponse.self
+        )
+    }
+
+    /// Get exams list (paginated)
+    /// Web API: GET /mobile/exams?status=X&upcoming=true&page=N&per_page=N
     func getExams(
         schoolId: String,
-        filters: GradeFilters = GradeFilters()
+        status: String? = nil,
+        upcoming: Bool? = nil,
+        page: Int = 1,
+        perPage: Int = 20
     ) async throws -> ExamsResponse {
-        var params = filters.queryParams
-        params["schoolId"] = schoolId
+        var params: [String: String] = [
+            "page": String(page),
+            "per_page": String(perPage)
+        ]
+        if let status { params["status"] = status }
+        if let upcoming { params["upcoming"] = String(upcoming) }
 
-        return try await api.get("/grades/exams", query: params, as: ExamsResponse.self)
+        return try await api.get("/mobile/exams", query: params, as: ExamsResponse.self)
     }
 
-    /// Get exam results for a specific exam
-    func getExamResults(
+    /// Get single exam detail
+    /// Web API: GET /mobile/exams/{id}
+    func getExam(
         examId: String,
         schoolId: String
-    ) async throws -> [ExamResult] {
-        return try await api.get(
-            "/grades/exams/\(examId)/results",
-            query: ["schoolId": schoolId],
-            as: [ExamResult].self
-        )
+    ) async throws -> Exam {
+        return try await api.get("/mobile/exams/\(examId)", as: Exam.self)
     }
 
-    /// Get exam results for a student
-    func getStudentResults(
-        studentId: String,
-        schoolId: String,
-        filters: GradeFilters = GradeFilters()
-    ) async throws -> ExamResultsResponse {
-        var params = filters.queryParams
-        params["schoolId"] = schoolId
-        params["studentId"] = studentId
-
-        return try await api.get("/grades/results", query: params, as: ExamResultsResponse.self)
-    }
-
-    /// Get report card for a student
-    func getReportCard(
-        studentId: String,
-        schoolId: String,
-        semester: String? = nil
-    ) async throws -> ReportCard {
-        var params: [String: String] = ["schoolId": schoolId]
-        if let semester = semester { params["semester"] = semester }
-
-        return try await api.get(
-            "/grades/report-card/\(studentId)",
-            query: params,
-            as: ReportCard.self
-        )
-    }
-
-    /// Get subjects for a class
+    /// Get subjects
+    /// Web API: GET /mobile/subjects?search=X&department=Y&lang=Z
     func getSubjects(
-        classId: String,
-        schoolId: String
+        schoolId: String,
+        search: String? = nil,
+        department: String? = nil,
+        lang: String? = nil
     ) async throws -> [SubjectInfo] {
-        return try await api.get(
-            "/subjects",
-            query: ["classId": classId, "schoolId": schoolId],
-            as: [SubjectInfo].self
-        )
+        var params: [String: String] = [:]
+        if let search { params["search"] = search }
+        if let department { params["department"] = department }
+        if let lang { params["lang"] = lang }
+
+        return try await api.get("/mobile/subjects", query: params, as: [SubjectInfo].self)
     }
 
-    // MARK: - Write Actions
-
-    /// Create a new exam
-    func createExam(
-        _ request: CreateExamRequest,
-        schoolId: String
-    ) async throws -> Exam {
-        let validation = GradesValidation.validateCreateExamForm(
-            title: request.title,
-            classId: request.classId,
-            subjectId: request.subjectId,
-            examDate: request.examDate,
-            totalMarks: request.totalMarks,
-            passingMarks: request.passingMarks
-        )
-
-        guard validation.isValid else {
-            throw GradesError.validationFailed(validation.errors)
-        }
-
-        struct CreateRequest: Encodable {
-            let exam: CreateExamRequest
-            let schoolId: String
-        }
-
-        let body = CreateRequest(exam: request, schoolId: schoolId)
-        return try await api.post("/grades/exams", body: body, as: Exam.self)
-    }
-
-    /// Submit marks for an exam
-    func submitMarks(
-        _ request: SubmitMarksRequest,
-        schoolId: String
-    ) async throws -> [ExamResult] {
-        struct MarksRequest: Encodable {
-            let marks: SubmitMarksRequest
-            let schoolId: String
-        }
-
-        let body = MarksRequest(marks: request, schoolId: schoolId)
-        return try await api.post("/grades/results/bulk", body: body, as: [ExamResult].self)
-    }
-
-    /// Publish exam results
-    func publishResults(
-        examId: String,
-        schoolId: String
-    ) async throws -> Exam {
-        struct PublishRequest: Encodable {
-            let schoolId: String
-        }
-
-        let body = PublishRequest(schoolId: schoolId)
-        return try await api.put("/grades/exams/\(examId)/publish", body: body, as: Exam.self)
-    }
-
-    // MARK: - Offline Actions
-
-    @MainActor
-    func submitMarksOffline(
-        _ request: SubmitMarksRequest,
-        schoolId: String
-    ) async throws -> [ExamResult]? {
-        if NetworkMonitor.shared.isConnected {
-            return try await submitMarks(request, schoolId: schoolId)
-        }
-
-        let payload = try JSONEncoder().encode(request)
-        await syncEngine.queueAction(
-            endpoint: "/grades/results/bulk",
-            method: .post,
-            payload: payload
-        )
-
-        return nil
-    }
+    // NOTE: createExam, submitMarks (bulk results), publishResults do not exist
+    // as mobile API endpoints. Exam/grade management is done via the web admin.
+    // The mobile API is read-only for grades.
 }
 
 // MARK: - Errors

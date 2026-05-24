@@ -171,24 +171,17 @@ final class StudentsViewModel {
         isShowingForm = true
     }
 
-    /// Delete student
+    /// Delete student — NOT AVAILABLE in web mobile API
+    /// Student deletion is admin-only via the web interface
     func deleteStudent(_ student: Student) async {
-        guard let schoolId = tenantContext?.schoolId else { return }
-
-        do {
-            try await actions.deleteStudent(id: student.id, schoolId: schoolId)
-            await loadStudents()
-        } catch {
-            self.error = error
-            showError = true
-        }
+        self.error = StudentsError.serverError("Student deletion is not available from the mobile app")
+        showError = true
     }
 
-    /// Delete students (batch)
+    /// Delete students (batch) — NOT AVAILABLE in web mobile API
     func deleteStudents(_ students: [Student]) async {
-        for student in students {
-            await deleteStudent(student)
-        }
+        self.error = StudentsError.serverError("Student deletion is not available from the mobile app")
+        showError = true
     }
 
     // MARK: - Form Submission

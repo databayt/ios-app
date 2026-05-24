@@ -98,13 +98,13 @@ struct ProfileContent: View {
                 // Support
                 Section(String(localized: "profile.support")) {
                     NavigationLink {
-                        Text(String(localized: "profile.help"))
+                        HelpView()
                     } label: {
                         Label(String(localized: "profile.help"), systemImage: "questionmark.circle")
                     }
 
                     NavigationLink {
-                        Text(String(localized: "profile.about"))
+                        AboutView()
                     } label: {
                         Label(String(localized: "profile.about"), systemImage: "info.circle")
                     }

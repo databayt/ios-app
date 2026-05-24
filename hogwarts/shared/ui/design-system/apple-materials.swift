@@ -70,32 +70,32 @@ extension View {
 
 // MARK: - Elevation Styles
 
-extension View {
-    enum ElevationLevel {
-        case flat
-        case low
-        case medium
-        case high
+enum ElevationLevel {
+    case flat
+    case low
+    case medium
+    case high
 
-        var shadow: (color: Color, radius: CGFloat, y: CGFloat) {
-            switch self {
-            case .flat:
-                return (.clear, 0, 0)
-            case .low:
-                return (.black.opacity(0.05), 4, 2)
-            case .medium:
-                return (.black.opacity(0.08), 12, 4)
-            case .high:
-                return (.black.opacity(0.12), 20, 8)
-            }
+    var shadow: (color: Color, radius: CGFloat, y: CGFloat) {
+        switch self {
+        case .flat:
+            return (.clear, 0, 0)
+        case .low:
+            return (.black.opacity(0.05), 4, 2)
+        case .medium:
+            return (.black.opacity(0.08), 12, 4)
+        case .high:
+            return (.black.opacity(0.12), 20, 8)
         }
     }
+}
 
+extension View {
     /// Apply elevation shadow to any view
     /// - Parameter level: Elevation level (flat, low, medium, high)
     func elevation(_ level: ElevationLevel) -> some View {
-        let shadow = level.shadow
-        return self.shadow(color: shadow.color, radius: shadow.radius, y: shadow.y)
+        let s = level.shadow
+        return self.shadow(color: s.color, radius: s.radius, y: s.y)
     }
 }
 
@@ -135,29 +135,63 @@ extension View {
     }
 }
 
-// MARK: - Color Extensions
+// MARK: - Liquid Glass Toolbar (iOS 26)
+// Source: Figma iOS 26 kit — Toolbar - Top - iPhone (node 1:3049)
+// Triple-blend: rgba(255,255,255,0.65) + #ddd color-burn + #f7f7f7 darken
+// Shadow: 0px 8px 40px rgba(0,0,0,0.12), Corner: capsule (296px)
 
-extension Color {
-    /// Apple's accent blue
-    static let appleBlue = Color(red: 0, green: 0.478, blue: 1)
+extension View {
+    /// iOS 26 liquid glass toolbar button — capsule with frosted glass
+    func liquidGlassToolbar() -> some View {
+        self
+            .background(
+                .thinMaterial,
+                in: Capsule()
+            )
+            .overlay {
+                Capsule()
+                    .strokeBorder(.quaternary.opacity(0.5), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.12), radius: 20, y: 4)
+    }
+}
 
-    /// Apple's system gray 1 (lightest)
-    static let appleGray1 = Color(UIColor.systemGray)
+// MARK: - Shapes (from Figma iOS 26 kit)
 
-    /// Apple's system gray 2
-    static let appleGray2 = Color(UIColor.systemGray2)
+enum HWShape {
+    /// Grouped table / card — Figma: 26px
+    static let card: CGFloat = 26
 
-    /// Apple's system gray 3
-    static let appleGray3 = Color(UIColor.systemGray3)
+    /// Small card — 16px
+    static let smallCard: CGFloat = 16
 
-    /// Apple's system gray 4
-    static let appleGray4 = Color(UIColor.systemGray4)
+    /// Button — Figma: 12px continuous
+    static let button: CGFloat = 12
 
-    /// Apple's system gray 5
-    static let appleGray5 = Color(UIColor.systemGray5)
+    /// Text field — 12px continuous
+    static let textField: CGFloat = 12
 
-    /// Apple's system gray 6 (darkest)
-    static let appleGray6 = Color(UIColor.systemGray6)
+    /// Chip / pill — 8px
+    static let chip: CGFloat = 8
+
+    /// Sheet top corners — 20px
+    static let sheet: CGFloat = 20
+
+    /// List row — 12px
+    static let listRow: CGFloat = 12
+}
+
+// MARK: - Row Heights (from Figma List component)
+
+enum HWRowHeight {
+    /// Standard row — Figma: 52px
+    static let standard: CGFloat = 52
+
+    /// Subtitle/image row — Figma: 68px
+    static let subtitle: CGFloat = 68
+
+    /// Minimum touch target — Apple HIG: 44px
+    static let minTouchTarget: CGFloat = 44
 }
 
 // MARK: - Background Modifiers

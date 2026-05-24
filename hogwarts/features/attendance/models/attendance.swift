@@ -235,38 +235,45 @@ struct UserInfo: Codable, Hashable {
 }
 
 /// Paginated attendance response
+/// Web API: GET /mobile/attendance/student/{id} → {data, total, page, per_page}
 struct AttendanceResponse: Codable {
     let data: [Attendance]
     let total: Int
     let page: Int
-    let pageSize: Int
-    let totalPages: Int
+    let perPage: Int
 }
 
 // MARK: - Attendance Statistics
 
-/// Attendance statistics for a student/class
+/// Attendance summary for a student
+/// Web API: GET /mobile/attendance/summary/{studentId}
+/// Returns: {total, present, absent, late, excused, percentage}
 struct AttendanceStats: Codable {
-    let totalDays: Int
-    let presentDays: Int
-    let absentDays: Int
-    let lateDays: Int
-    let excusedDays: Int
-    let sickDays: Int
+    let total: Int
+    let present: Int
+    let absent: Int
+    let late: Int
+    let excused: Int
+    let percentage: Double
 
-    var attendanceRate: Double {
-        guard totalDays > 0 else { return 0 }
-        return Double(presentDays + lateDays) / Double(totalDays) * 100
-    }
+    // Computed aliases for backward compatibility with views
+    var totalDays: Int { total }
+    var presentDays: Int { present }
+    var absentDays: Int { absent }
+    var lateDays: Int { late }
+    var excusedDays: Int { excused }
+    var sickDays: Int { 0 } // Not in web API response
+
+    var attendanceRate: Double { percentage }
 
     var presentPercentage: Double {
-        guard totalDays > 0 else { return 0 }
-        return Double(presentDays) / Double(totalDays) * 100
+        guard total > 0 else { return 0 }
+        return Double(present) / Double(total) * 100
     }
 
     var absentPercentage: Double {
-        guard totalDays > 0 else { return 0 }
-        return Double(absentDays) / Double(totalDays) * 100
+        guard total > 0 else { return 0 }
+        return Double(absent) / Double(total) * 100
     }
 }
 

@@ -1,9 +1,18 @@
 import Foundation
 import Security
 
+/// Protocol surface so `AuthManager` and other consumers can swap in an
+/// in-memory implementation in tests without touching the real Keychain.
+protocol KeychainServicing: Sendable {
+    func save(_ value: String, for key: KeychainService.Key) throws
+    func get(_ key: KeychainService.Key) -> String?
+    func delete(_ key: KeychainService.Key)
+    func clearAll()
+}
+
 /// Secure storage using Keychain
 /// Stores sensitive data like JWT tokens
-final class KeychainService {
+final class KeychainService: KeychainServicing, Sendable {
 
     enum Key: String {
         case accessToken = "com.hogwarts.accessToken"

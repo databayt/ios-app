@@ -47,30 +47,15 @@ struct StudentUpdateRequest: Encodable {
 // MARK: - Filter Types
 
 /// Student list filters
-/// Mirrors: Search params in content.tsx
+/// Web API: GET /mobile/students?search=X&section_id=Y&status=Z&page=N&per_page=N
 struct StudentFilters {
     var search: String?
     var status: StudentStatus?
-    var yearLevelId: String?
-    var batchId: String?
+    var sectionId: String?
     var page: Int = 1
-    var pageSize: Int = 20
-    var sortBy: SortField = .name
-    var sortOrder: SortOrder = .ascending
+    var perPage: Int = 20
 
-    enum SortField: String {
-        case name = "givenName"
-        case grNumber = "grNumber"
-        case createdAt = "createdAt"
-        case status = "status"
-    }
-
-    enum SortOrder: String {
-        case ascending = "asc"
-        case descending = "desc"
-    }
-
-    /// Convert to query parameters
+    /// Convert to query parameters matching the web API
     var queryParams: [String: String] {
         var params: [String: String] = [:]
 
@@ -80,17 +65,12 @@ struct StudentFilters {
         if let status = status {
             params["status"] = status.rawValue
         }
-        if let yearLevelId = yearLevelId {
-            params["yearLevelId"] = yearLevelId
-        }
-        if let batchId = batchId {
-            params["batchId"] = batchId
+        if let sectionId = sectionId {
+            params["section_id"] = sectionId
         }
 
         params["page"] = String(page)
-        params["pageSize"] = String(pageSize)
-        params["sortBy"] = sortBy.rawValue
-        params["sortOrder"] = sortOrder.rawValue
+        params["per_page"] = String(perPage)
 
         return params
     }

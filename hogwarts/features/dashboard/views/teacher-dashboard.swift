@@ -4,6 +4,7 @@ import SwiftUI
 /// Mirrors: src/components/platform/dashboard/teacher-dashboard.tsx
 struct TeacherDashboard: View {
     @Environment(TenantContext.self) private var tenantContext
+    @Environment(NotificationNavigationState.self) private var nav
 
     @State private var viewModel = TeacherDashboardViewModel()
 
@@ -115,7 +116,9 @@ struct TeacherDashboard: View {
                         Spacer()
 
                         Button(String(localized: "dashboard.markAttendance")) {
-                            // Navigate to attendance marking
+                            // Until a dedicated attendance route exists, hop to the
+                            // schedule tab where the class roster is reachable.
+                            nav.selectedTab = .schedule
                         }
                         .font(.caption)
                         .padding(.horizontal, 12)
@@ -142,17 +145,24 @@ struct TeacherDashboard: View {
                     title: String(localized: "dashboard.takeAttendance"),
                     systemImage: "checkmark.circle",
                     color: .blue
-                )
+                ) {
+                    nav.selectedTab = .schedule
+                }
                 quickActionButton(
                     title: String(localized: "dashboard.enterGrades"),
                     systemImage: "pencil.line",
                     color: .purple
-                )
+                ) {
+                    // TODO: route to grades feature once a dedicated tab/route exists.
+                    // Today: stay on dashboard so we don't navigate to a misleading tab.
+                }
                 quickActionButton(
                     title: String(localized: "dashboard.messages"),
                     systemImage: "message",
                     color: .green
-                )
+                ) {
+                    nav.selectedTab = .messages
+                }
             }
         }
     }
@@ -161,10 +171,13 @@ struct TeacherDashboard: View {
     private var currentClasses: [DashboardClassItem] { viewModel.classes }
     private var currentPendingClasses: [DashboardClassItem] { viewModel.pendingClasses }
 
-    private func quickActionButton(title: String, systemImage: String, color: Color) -> some View {
-        Button {
-            // Navigate to action
-        } label: {
+    private func quickActionButton(
+        title: String,
+        systemImage: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: systemImage)
                     .font(.title3)
