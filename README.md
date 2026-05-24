@@ -2,6 +2,18 @@
 
 Native iOS companion app for the Hogwarts school management platform.
 
+## Sibling repositories
+
+The Hogwarts platform spans three repos with a clear hierarchy:
+
+| Repo | Role | Stack |
+|---|---|---|
+| [`databayt/hogwarts`](https://github.com/databayt/hogwarts) | **Source of truth** — web app, API, schema, multi-tenant rules | Next.js 16 · Prisma · TypeScript |
+| [`databayt/android-app`](https://github.com/databayt/android-app) | **Lead mobile reference** — feature patterns are set here first | Kotlin · Jetpack Compose |
+| [`databayt/ios-app`](https://github.com/databayt/ios-app) (this repo) | **Mirrors android-app** | Swift 6 · SwiftUI |
+
+iOS follows Android: when a feature lands in `android-app`, it gets ported here against the same Hogwarts API contract. See [hogwarts/docs/MOBILE-HIERARCHY.md](https://github.com/databayt/hogwarts/blob/main/docs/MOBILE-HIERARCHY.md) for the full doctrine.
+
 ## Tech Stack
 
 - **Swift 6.0+** / **SwiftUI** / **iOS 18+**
