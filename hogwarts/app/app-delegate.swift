@@ -13,12 +13,21 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        registerNotificationCategories()
         registerForPushNotifications()
 
         // Initialize Facebook SDK
         ApplicationDelegate.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
 
         return true
+    }
+
+    /// PUSH-002 — re-validate APNs registration when the app returns to
+    /// foreground. APNs can rotate the device token (rare, but happens on
+    /// restore-from-backup); re-registering is cheap and is the only signal
+    /// the server gets that a stale token should be replaced.
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        UIApplication.shared.registerForRemoteNotifications()
     }
 
     // MARK: - URL Handling (OAuth Callbacks)
@@ -54,6 +63,66 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
                 Logger.app.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+
+    /// PUSH-003 — register notification categories so iOS shows the
+    /// expected Quick Actions (Reply, Mark Read, View) directly from
+    /// the Lock Screen / banner without launching the app.
+    ///
+    /// Identifiers MUST match what the backend sets in the APNs payload
+    /// `category` field (see `databayt/hogwarts/src/app/api/mobile/notifications/*`).
+    private func registerNotificationCategories() {
+        // Message: Reply (text input) + Mark Read
+        let reply = UNTextInputNotificationAction(
+            identifier: "MESSAGE_REPLY",
+            title: String(localized: "notif.action.reply"),
+            options: [.authenticationRequired],
+            textInputButtonTitle: String(localized: "notif.action.send"),
+            textInputPlaceholder: String(localized: "notif.action.message_placeholder")
+        )
+        let markRead = UNNotificationAction(
+            identifier: "MESSAGE_MARK_READ",
+            title: String(localized: "notif.action.mark_read"),
+            options: []
+        )
+        let messageCategory = UNNotificationCategory(
+            identifier: "MESSAGE",
+            actions: [reply, markRead],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        // Generic destination categories — tap routes via NotificationRouter.
+        let view = UNNotificationAction(
+            identifier: "VIEW",
+            title: String(localized: "notif.action.view"),
+            options: [.foreground]
+        )
+        let announcementCategory = UNNotificationCategory(
+            identifier: "ANNOUNCEMENT",
+            actions: [view],
+            intentIdentifiers: [],
+            options: []
+        )
+        let attendanceCategory = UNNotificationCategory(
+            identifier: "ATTENDANCE",
+            actions: [view],
+            intentIdentifiers: [],
+            options: []
+        )
+        let gradeCategory = UNNotificationCategory(
+            identifier: "GRADE",
+            actions: [view],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([
+            messageCategory,
+            announcementCategory,
+            attendanceCategory,
+            gradeCategory
+        ])
     }
 
     func application(

@@ -48,8 +48,12 @@ enum SentryBootstrap {
     /// Update the Sentry user scope after a successful login or school
     /// switch. ID is the internal user uuid (not the email). Role and
     /// schoolId are safe to attach; email is explicitly NOT set.
+    ///
+    /// `Sentry.User` is qualified to avoid collision with the app's own
+    /// `User` auth model — both types are named `User` in their respective
+    /// modules.
     static func setUserContext(userId: String, schoolId: String?, role: String?, locale: String) {
-        let user = User()
+        let user = Sentry.User()
         user.userId = userId
         user.data = [
             "tenant_id": schoolId ?? "",

@@ -139,6 +139,17 @@ final class AuthManager {
         self.session = session
         self.currentUser = session.user
         self.sessionState = .authenticated
+
+        // OBS-006 — attach safe tenant + role to Sentry scope so every
+        // subsequent event is segmentable. Email/name are deliberately
+        // NOT included (PII strip happens in SentryBootstrap.beforeSend
+        // too, but it's cheaper to never set them here).
+        SentryBootstrap.setUserContext(
+            userId: session.user.id,
+            schoolId: session.schoolId,
+            role: session.user.role,
+            locale: Locale.current.identifier
+        )
     }
 
     /// Restore session on app launch.
@@ -267,5 +278,9 @@ final class AuthManager {
         currentUser = nil
         session = nil
         sessionState = .unauthenticated
+
+        // OBS-006 — strip user context so post-logout crashes aren't
+        // attributed to the previous user/school.
+        SentryBootstrap.clearUserContext()
     }
 }

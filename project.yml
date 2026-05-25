@@ -13,6 +13,12 @@ settings:
   base:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
+    # APNs environment defaults to sandbox in Debug, production elsewhere.
+    # xcconfig (CORE-009) will eventually drive these per-config.
+    APS_ENVIRONMENT: development
+  configs:
+    Release:
+      APS_ENVIRONMENT: production
     # Swift 6.2 + Xcode 26 "approachable concurrency": the language mode
     # turns warnings into errors, MainActor is the default isolation, and
     # the two upcoming features below close the remaining holes that the
@@ -82,6 +88,9 @@ targets:
         NSPhotoLibraryUsageDescription: "Photo library access is needed to attach documents to admission applications and profile photos."
         NSPhotoLibraryAddUsageDescription: "Save shared documents (ID cards, receipts, report cards) to your photo library."
         NSCalendarsWriteOnlyAccessUsageDescription: "Allow Hogwarts to add school events to your calendar."
+        # AUTH-005 — BiometricService is wired into ContentView; without this
+        # key, the Face ID prompt is suppressed by iOS without a useful error.
+        NSFaceIDUsageDescription: "Use Face ID to unlock Hogwarts and approve sensitive school actions."
         ITSAppUsesNonExemptEncryption: false
         GIDClientID: "GOOGLE_CLIENT_ID"
         CFBundleURLTypes:
@@ -102,6 +111,10 @@ targets:
           - Default
         keychain-access-groups:
           - $(AppIdentifierPrefix)org.databayt.Hogwarts
+        # APNs environment — Debug uses sandbox, Release uses production.
+        # Without this entitlement, AppDelegate.didRegisterForRemoteNotifications
+        # never fires on real devices. PUSH-001 / SHIP gate.
+        aps-environment: $(APS_ENVIRONMENT)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.databayt.Hogwarts

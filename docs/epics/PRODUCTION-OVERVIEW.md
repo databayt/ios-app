@@ -139,24 +139,28 @@ The **~75 M0 stories** below are the launch critical path. Every story has a ful
 
 ### Sprint 2 (weeks 3–4) — Phase C + first TestFlight
 
-- [PUSH-001](../stories/PUSH-001-apns-registration.md) APNs registration + token POST [3]
-- [PUSH-002](../stories/PUSH-002-token-refresh-foreground.md) Token refresh on foreground [2]
-- [PUSH-003](../stories/PUSH-003-notification-categories.md) Categories + Reply/Mark Read quick actions [5]
-- [PUSH-004](../stories/PUSH-004-deep-link-routing.md) Deep-link routing via `NotificationNavigationState` [5]
-- [PUSH-005](../stories/PUSH-005-silent-push-sync.md) Silent push for sync triggers [3]
-- [GOV-001](../stories/GOV-001-legal-consent-flow-first-login.md) Legal consent (TOS/Privacy/COPPA/GDPR-K) [5]
-- [GOV-002](../stories/GOV-002-parental-consent-minors.md) Parental consent for minors [5]
-- [GOV-003](../stories/GOV-003-data-export-apple-guideline.md) Data export (Apple 5.1.1(v)) [5]
-- [GOV-004](../stories/GOV-004-account-deletion-apple-guideline.md) Account deletion [5]
-- [GOV-005](../stories/GOV-005-privacy-manifest-audit.md) Privacy manifest audit [3]
-- [GOV-006](../stories/GOV-006-app-tracking-transparency.md) ATT prompt [2]
-- [OBS-001](../stories/OBS-001-sentry-crash-reporting.md) Sentry crash reporting [3]
-- [OBS-002](../stories/OBS-002-event-taxonomy.md) Event taxonomy (`<feature>.<action>`) [5]
-- [OBS-006](../stories/OBS-006-user-properties-segmented.md) Tenant/role/plan user properties [3]
-- [SHIP-001](../stories/SHIP-001-testflight-setup.md) TestFlight setup + private beta [3]
-- **[SHIP-009](../stories/SHIP-009-fastlane-testflight-pipeline.md) (NEW)** Fastlane + GitHub Actions TestFlight pipeline [3]
+> **Status as of 2026-05-25** — push infrastructure is largely already built. Real remaining work is **governance** (consent flow, account export/delete) and **ship pipeline** (TestFlight + Fastlane). The push side just needed the `aps-environment` entitlement + foreground re-register + categories — all landed in `feat/sprint-2-audit`.
 
-**Sprint 2 exit:** ✅ Push from APNs reaches device, tap opens correct deep link. ✅ Consent flow gates first launch. ✅ Sentry receives test crash. ✅ First TestFlight build distributed to Ali + Ahmed Baha (King Fahad Schools pilot).
+- ✅ [PUSH-001](../stories/PUSH-001-apns-registration.md) APNs registration + token POST [3] — **done** (`AppDelegate.didRegisterForRemoteNotificationsWithDeviceToken` POSTs via `APIClient.shared.registerDeviceToken`)
+- ✅ [PUSH-002](../stories/PUSH-002-push-token-refresh-foreground.md) Token refresh on foreground [2] — **done in this branch** (`applicationWillEnterForeground` re-calls `registerForRemoteNotifications` so APNs token rotation after restore-from-backup is caught)
+- ✅ [PUSH-003](../stories/PUSH-003-notification-categories-actions.md) Categories + Reply/Mark Read quick actions [5] — **done in this branch** (`MESSAGE`/`ANNOUNCEMENT`/`ATTENDANCE`/`GRADE` categories registered with Reply text-input + Mark Read + View actions; identifiers match backend APNs payload `category` field)
+- ✅ [PUSH-004](../stories/PUSH-004-notification-deep-link-routing.md) Deep-link routing via `NotificationNavigationState` [5] — **done** (`NotificationRouter` parses userInfo → typed `Destination`; `AppDelegate.userNotificationCenter(didReceive:)` hops to MainActor and updates `NotificationNavigationState.shared`)
+- ✅ [PUSH-005](../stories/PUSH-005-silent-push-sync.md) Silent push for sync triggers [3] — **done** (`application(didReceiveRemoteNotification:)` → `SyncEngine.shared.syncAll()` → `.newData`)
+- ❌ [GOV-001](../stories/GOV-001-legal-consent-flow-first-login.md) Legal consent (TOS/Privacy/COPPA/GDPR-K) [5] — **not started** (no consent UI; depends on backend `GET/POST /api/mobile/consent/*` which is filed as hogwarts#279 but not yet shipped)
+- ❌ [GOV-002](../stories/GOV-002-parental-consent-minors.md) Parental consent for minors [5] — **not started**
+- ❌ [GOV-003](../stories/GOV-003-data-export-apple-guideline.md) Data export (Apple 5.1.1(v)) [5] — **not started** (depends on backend hogwarts#274)
+- ❌ [GOV-004](../stories/GOV-004-account-deletion-apple-guideline.md) Account deletion [5] — **not started** (depends on backend hogwarts#275)
+- ✅ [GOV-005](../stories/GOV-005-privacy-manifest-audit.md) Privacy manifest audit [3] — **done in this branch** (`PrivacyInfo.xcprivacy` expanded from 1 → 10 collected data types + 4 API access reasons; covers DeviceID, Email, Name, Phone, UserID, OtherUserContent, PhotosorVideos, CrashData, PerformanceData, OtherDiagnosticData)
+- ❌ [GOV-006](../stories/GOV-006-app-tracking-transparency.md) ATT prompt [2] — **not started** (likely never prompts since `NSPrivacyTracking=false`, but story closure needs a code-level decision)
+- ✅ [OBS-001](../stories/OBS-001-sentry-crash-reporting.md) Sentry crash reporting [3] — **done in PR #29**
+- ❌ [OBS-002](../stories/OBS-002-event-taxonomy.md) Event taxonomy (`<feature>.<action>`) [5] — **not started** (needs lightweight wrapper over `SentrySDK.captureMessage` + breadcrumbs)
+- ✅ [OBS-006](../stories/OBS-006-user-properties-segmented.md) Tenant/role/plan user properties [3] — **done in this branch** (`SentryBootstrap.setUserContext(userId:schoolId:role:locale:)` called from `AuthManager.saveSession`; `clearUserContext` from `signOut`; PII never set)
+- ❌ [SHIP-001](../stories/SHIP-001-testflight-setup.md) TestFlight setup + private beta [3] — **not started** (no `.github/workflows/testflight.yml`)
+- ❌ [SHIP-009](../stories/SHIP-009-fastlane-testflight-pipeline.md) (NEW) Fastlane + GitHub Actions TestFlight pipeline [3] — **not started** (no `fastlane/` dir)
+
+**Bonus fix landed**: `aps-environment` entitlement was MISSING — even with PUSH-001 code present, real APNs would never deliver. Added per-config (`development` in Debug, `production` in Release) so this is no longer a launch blocker.
+
+**Sprint 2 exit:** ⚠️ Push from APNs reaches device (entitlement now correct), tap opens correct deep link. ❌ Consent flow gates first launch. ✅ Sentry receives test crash. ❌ First TestFlight build distributed.
 
 ### Sprint 3 (weeks 5–6) — Phase D + E in parallel
 
