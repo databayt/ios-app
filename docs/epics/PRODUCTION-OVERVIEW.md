@@ -25,6 +25,8 @@ When a feature lands in `android-app`, it gets ported here. When a backend patte
 
 The phase tags below (**A–F**) deliberately mirror the Android `.bmad/epics/epic-prod-overview.md` structure so cross-platform status comparisons stay one-to-one. iOS keeps its existing `phase: M0/M1/M2` milestone tagging untouched in each epic's frontmatter — A–F is an **execution overlay**, not a replacement.
 
+> **Design rules**: every UI story in this roadmap obeys [docs/DESIGN-RULES.md](../DESIGN-RULES.md) — atomic composition (compose from `shared/atom/` before inventing), mirror pattern (`views/viewmodels/services/models/helpers` per feature), kebab-case files, `@Observable @MainActor` view models, Liquid Glass + iOS 26 idioms, RTL/AR parity, [Figma iOS](https://www.figma.com/design/WJPT23xMx4B6oXrCavmHbQ/iso) as the pixel source of truth, [Android app](https://github.com/databayt/android-app) as the feature cadence reference.
+
 ---
 
 ## Phase Structure (mirrors Android)
