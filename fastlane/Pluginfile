@@ -1,0 +1,6 @@
+# SHIP-009 — Fastlane plugins. Run `fastlane install_plugins` locally
+# to materialize Gemfile.lock entries; CI runs `bundle install` once
+# at the start of the workflow.
+
+gem 'fastlane-plugin-sentry'      # upload_symbols_to_sentry for dSYM upload
+gem 'fastlane-plugin-versioning'  # finer build-number control than agvtool

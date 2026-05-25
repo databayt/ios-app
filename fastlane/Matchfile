@@ -1,0 +1,18 @@
+# SHIP-009 — Fastlane Match config.
+# The signing repo URL is env-driven so this file is safe to commit
+# (a private signing repo URL is itself a low-sensitivity secret but
+# leaving it out of the repo is the doctrine).
+#
+# The signing repo should be a private GitHub repo created via:
+#   gh repo create databayt/ios-signing --private --description "Match-managed iOS certificates"
+#
+# Then: `fastlane match init` once locally, push, and CI pulls via
+# MATCH_GIT_BASIC_AUTHORIZATION (base64 of `username:personal_access_token`).
+
+git_url(ENV["MATCH_GIT_URL"] || "https://github.com/databayt/ios-signing.git")
+storage_mode("git")
+type("appstore") # default — `beta` lane overrides if needed
+
+app_identifier(["org.databayt.Hogwarts"])
+username(ENV["FASTLANE_APPLE_ID"])
+team_id(ENV["DEVELOPMENT_TEAM"])

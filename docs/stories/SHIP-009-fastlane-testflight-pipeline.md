@@ -3,7 +3,7 @@
 **Epic**: SHIP
 **Priority**: P0
 **Phase**: M0
-**Status**: pending
+**Status**: done
 **Effort**: S (3)
 **Roles**: [all]
 **Multi-Tenant**: required

@@ -1,0 +1,103 @@
+name: TestFlight
+
+# SHIP-009 — Tag-triggered TestFlight upload.
+# Push a tag matching `v*` (e.g. `v0.9.0-beta1`, `v1.0.0-rc1`) on `main`
+# and this workflow archives + uploads via Fastlane. See
+# docs/release/testflight-distribution.md for the engineer runbook.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Don't queue parallel uploads of competing tags — pilot serializes anyway
+# and the second build would just overwrite the first's "Latest" badge.
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Archive + Pilot
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.app
+
+      - name: Cache SPM + DerivedData
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-testflight-${{ hashFiles('project.yml', 'hogwarts/**/*.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-testflight-
+
+      - name: Install xcodegen + xcbeautify
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          brew list xcbeautify >/dev/null 2>&1 || brew install xcbeautify
+
+      - name: Install Bundler + Fastlane plugins
+        run: |
+          gem install bundler --no-document
+          if [ -f Gemfile ]; then
+            bundle install --jobs 4 --retry 3
+          else
+            gem install fastlane --no-document
+            fastlane install_plugins
+          fi
+
+      - name: Set release notes for this tag
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          # If the tag annotation has a body, prefer that. Otherwise fall
+          # back to the EN section of the template.
+          body=$(git tag -l --format='%(contents:body)' "$tag")
+          if [ -n "$body" ]; then
+            mkdir -p docs/release
+            printf '%s\n' "$body" > docs/release/release-notes-current.txt
+          elif [ -f docs/release/release-notes-template.md ]; then
+            mkdir -p docs/release
+            # Naive EN-section extraction — between '## EN' and '## AR'.
+            awk '/^## EN/{flag=1; next} /^## AR/{flag=0} flag' \
+              docs/release/release-notes-template.md \
+              > docs/release/release-notes-current.txt
+          fi
+
+      - name: Fastlane beta
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          FASTLANE_APPLE_ID: ${{ secrets.FASTLANE_APPLE_ID }}
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+          ITC_TEAM_ID: ${{ secrets.ITC_TEAM_ID }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: databayt
+          SENTRY_PROJECT: hogwarts-ios
+          SLACK_URL: ${{ secrets.SLACK_URL }}
+          FASTLANE_DISABLE_COLORS: "1"
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+        run: |
+          if [ -f Gemfile ]; then
+            bundle exec fastlane beta
+          else
+            fastlane beta
+          fi
+
+      - name: Upload archive artifact (debugging only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.ref_name }}
+          path: build/
+          retention-days: 7

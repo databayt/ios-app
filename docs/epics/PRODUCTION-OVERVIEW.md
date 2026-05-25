@@ -194,12 +194,12 @@ The **~75 M0 stories** below are the launch critical path. Every story has a ful
 - ❌ [SHIP-002](../stories/SHIP-002-app-store-assets.md) App Store assets EN+AR (6.7"/6.1"/iPad screenshots × 2 locales) [5] — **not started** (App Store Connect work; needs `xcrun simctl io screenshot` script + 5 critical-flow screenshots × 2 device sizes × 2 locales = 20 images, plus app preview video)
 - ✅ [SHIP-003](../stories/SHIP-003-privacy-manifest-finalization.md) Privacy manifest finalization [3] — **done in PR #30** (`PrivacyInfo.xcprivacy` has 10 collected data types + 4 API access reasons)
 - ✅ [SHIP-004](../stories/SHIP-004-export-compliance.md) Export compliance (encryption use declaration) [1] — **done** (`ITSAppUsesNonExemptEncryption: false` in `project.yml`)
-- ❌ [SHIP-005](../stories/SHIP-005-release-notes-template.md) Release notes EN+AR [1] — **not started** (template needed in `docs/release/release-notes-template.md`)
-- ❌ SHIP-007 App Review submission + appeal playbook [3] — **not started** (final step; depends on Fastlane + asset readiness)
-- ❌ [SHIP-001](../stories/SHIP-001-testflight-setup.md) TestFlight setup [3] — **not started** (TestFlight private beta config in App Store Connect)
-- ❌ [SHIP-009](../stories/SHIP-009-fastlane-testflight-pipeline.md) Fastlane + GitHub Actions TestFlight pipeline [3] — **not started** (no `fastlane/` dir yet; the bulk of remaining release infrastructure)
+- ✅ [SHIP-005](../stories/SHIP-005-release-notes-template.md) Release notes EN+AR [1] — **done in `feat/sprint-4-launch-ops`** (`docs/release/release-notes-template.md` bilingual; TestFlight workflow parses EN section automatically when tag annotation is empty)
+- ❌ SHIP-007 App Review submission + appeal playbook [3] — **not started** (final step; depends on first successful TestFlight upload + assets ready)
+- ✅ [SHIP-001](../stories/SHIP-001-testflight-setup.md) TestFlight setup [3] — **done in `feat/sprint-4-launch-ops`** (engineer runbook at `docs/release/testflight-distribution.md` walks through API key generation, Match repo bootstrap, GitHub Actions secret list, App Store Connect app shell, demo account, per-release cadence, troubleshooting + credential rotation)
+- ✅ [SHIP-009](../stories/SHIP-009-fastlane-testflight-pipeline.md) Fastlane + GitHub Actions TestFlight pipeline [3] — **done in `feat/sprint-4-launch-ops`** (`fastlane/Fastfile` with `beta` + `release` lanes; `Appfile`/`Matchfile`/`Pluginfile`; `.github/workflows/testflight.yml` triggered on `v*` tag, runs on macos-15, secrets sourced from GitHub Actions environment; auto-increments build number from latest TestFlight, signs via Match readonly, uploads via pilot, pushes dSYMs to Sentry, posts to Slack)
 
-**Sprint 4 exit (revised):** ✅ Universal Links open the app. ✅ Spotlight result taps route to the correct screen. ❌ Tag → TestFlight pipeline (SHIP-009). ❌ App Store Connect metadata + screenshots (SHIP-002 + SHIP-005). ❌ Submission accepted.
+**Sprint 4 exit (final):** ✅ Universal Links open the app. ✅ Spotlight result taps route to the correct screen. ✅ Tag → TestFlight pipeline reproducible. ✅ Release notes template + runbook in place. ❌ App Store Connect metadata + screenshots (SHIP-002, manual). ❌ Submission accepted (SHIP-007, depends on first end-to-end run + assets).
 
 ---
 

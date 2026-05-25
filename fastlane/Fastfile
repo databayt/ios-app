@@ -1,0 +1,154 @@
+# SHIP-009 — Fastlane lanes for Hogwarts iOS.
+#
+# Two lanes:
+#   `beta`    — archive + sign + upload to TestFlight (CI default on `v*` tags)
+#   `release` — wrap `beta` with App Store metadata + submission staging
+#
+# Secrets read from env (set by the workflow file `.github/workflows/testflight.yml`
+# or by local engineers' .env / shell): see `docs/release/credentials.md`
+# for what to set and where.
+
+# Lower noise; turn on for debugging.
+fastlane_require "spaceship"
+
+default_platform(:ios)
+
+PROJECT_FILE  = "Hogwarts.xcodeproj"
+SCHEME        = "Hogwarts"
+BUNDLE_ID     = "org.databayt.Hogwarts"
+RELEASE_NOTES_PATH = "docs/release/release-notes-current.txt"
+
+before_all do |lane, options|
+  # Always regenerate the Xcode project so CI matches local — engineers
+  # who forget to commit project.pbxproj changes don't break the build.
+  sh "cd .. && xcodegen generate"
+end
+
+# ---------------------------------------------------------------------------
+# Lane: beta
+# ---------------------------------------------------------------------------
+# Tag push (`v*`) → archive Release → sign with Match → pilot upload.
+# dSYMs are pushed to Sentry by the post-archive hook so symbolicated
+# crashes show up alongside the build in Sentry's dashboard.
+lane :beta do
+  app_store_connect_api_key(
+    key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
+    issuer_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ISSUER_ID"),
+    key_content: ENV.fetch("APP_STORE_CONNECT_API_KEY_CONTENT"), # base64
+    is_key_content_base64: true,
+    in_house: false
+  )
+
+  # Bump build number to "latest TestFlight + 1" so every upload is
+  # monotonic without manual coordination across branches.
+  latest_build = latest_testflight_build_number(
+    app_identifier: BUNDLE_ID,
+    initial_build_number: 0
+  )
+  increment_build_number(
+    xcodeproj: PROJECT_FILE,
+    build_number: latest_build + 1
+  )
+
+  # Match for signing — Apple ID + certificate state lives in the
+  # private signing repo configured in Matchfile.
+  match(
+    type: "appstore",
+    app_identifier: BUNDLE_ID,
+    readonly: true # CI never modifies the signing repo
+  )
+
+  gym(
+    project: PROJECT_FILE,
+    scheme: SCHEME,
+    clean: true,
+    output_directory: "build",
+    output_name: "Hogwarts.ipa",
+    configuration: "Release",
+    export_method: "app-store",
+    export_options: {
+      uploadBitcode: false,
+      uploadSymbols: true,
+      manageAppVersionAndBuildNumber: false
+    }
+  )
+
+  pilot(
+    api_key: lane_context[SharedValues::APP_STORE_CONNECT_API_KEY],
+    app_identifier: BUNDLE_ID,
+    ipa: "build/Hogwarts.ipa",
+    skip_submission: false,
+    skip_waiting_for_build_processing: true,
+    distribute_external: false,
+    changelog: release_notes_for_pilot
+  )
+
+  upload_symbols_to_sentry(
+    auth_token: ENV["SENTRY_AUTH_TOKEN"],
+    org_slug: ENV["SENTRY_ORG"] || "databayt",
+    project_slug: ENV["SENTRY_PROJECT"] || "hogwarts-ios",
+    dsym_path: lane_context[SharedValues::DSYM_OUTPUT_PATH]
+  ) if ENV["SENTRY_AUTH_TOKEN"]
+
+  slack_message
+end
+
+# ---------------------------------------------------------------------------
+# Lane: release
+# ---------------------------------------------------------------------------
+# Adds App Store metadata + screenshots to the beta build. Use only
+# for promotion-to-prod; standard sprint builds go via `beta`.
+lane :release do
+  beta
+  deliver(
+    api_key: lane_context[SharedValues::APP_STORE_CONNECT_API_KEY],
+    app_identifier: BUNDLE_ID,
+    submit_for_review: false, # human approves in App Store Connect
+    automatic_release: false,
+    force: true,              # skip prompts in CI
+    skip_screenshots: false,
+    skip_metadata: false,
+    precheck_include_in_app_purchases: false,
+    submission_information: {
+      add_id_info_uses_idfa: false,
+      export_compliance_encryption_updated: false,
+      export_compliance_uses_encryption: false # matches ITSAppUsesNonExemptEncryption
+    }
+  )
+end
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# Read the current release notes from the EN section of the template, with
+# a sensible fallback so a missing file doesn't break the upload.
+def release_notes_for_pilot
+  path = File.expand_path("../" + RELEASE_NOTES_PATH, __dir__)
+  return "Build #{lane_context[SharedValues::BUILD_NUMBER]}" unless File.exist?(path)
+  File.read(path).strip
+end
+
+def slack_message
+  return unless ENV["SLACK_URL"]
+  slack(
+    message: ":rocket: Hogwarts iOS build #{lane_context[SharedValues::BUILD_NUMBER]} uploaded to TestFlight",
+    success: true,
+    payload: { "Build" => lane_context[SharedValues::BUILD_NUMBER] }
+  )
+end
+
+# Fail loudly + clearly when a required env var is missing — better than
+# Fastlane's generic "nil:NilClass" deep in a stack trace.
+ENV_REQUIRED = %w[
+  APP_STORE_CONNECT_API_KEY_ID
+  APP_STORE_CONNECT_API_KEY_ISSUER_ID
+  APP_STORE_CONNECT_API_KEY_CONTENT
+  MATCH_PASSWORD
+  MATCH_GIT_BASIC_AUTHORIZATION
+].freeze
+
+before_all do
+  missing = ENV_REQUIRED.reject { |k| ENV[k] && !ENV[k].empty? }
+  UI.user_error!("Missing required env vars: #{missing.join(', ')}") unless missing.empty?
+end

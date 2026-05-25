@@ -1,0 +1,8 @@
+# SHIP-009 — App identity for Fastlane.
+# Team ID + iTunes Connect ID intentionally left to env so this file is
+# safe to commit. CI sets them via GitHub Actions secrets.
+
+app_identifier("org.databayt.Hogwarts")
+apple_id(ENV["FASTLANE_APPLE_ID"])     # human ID — not used by API-key auth, but pilot fallback needs it
+team_id(ENV["DEVELOPMENT_TEAM"])       # Apple Developer team ID
+itc_team_id(ENV["ITC_TEAM_ID"])        # App Store Connect team ID (often distinct from Developer)
