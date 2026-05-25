@@ -114,20 +114,22 @@ All M0 feature epics — TODOs swept, scaffolds wired to real `/api/mobile/*` ca
 
 The **~75 M0 stories** below are the launch critical path. Every story has a fully-written file at `docs/stories/{ID}.md` with user story, AC, file paths, i18n keys, tests, and DoD. Sprint capacity assumes **2 engineers full-time + 1 QA**.
 
+> **Status as of 2026-05-25** — audit of `hogwarts/` against the M0 story backlog revealed that **most of Sprint 1 is already implemented in code** (only the story files were still marked `pending`). The status tags below reflect the audit findings; story files have been flipped to `Status: done` where confirmed. The genuine remaining gaps are **CORE-002 retry-on-401**, **CORE-006 audit-log writer**, **CORE-009 staging scheme**, and the partial scope under CORE-008 (DSN per environment).
+
 ### Sprint 1 (weeks 1–2) — Phase A + B
 
 **Phase A (engineer 1):** the backbone
-- [CORE-001](../stories/CORE-001-api-client-mobile-prefix.md) APIClient `/api/mobile/*` + snake_case [3 pts] — **#1 blocker, do first**
-- [CORE-002](../stories/CORE-002-token-refresh-race-safe.md) Token refresh via `PUT /mobile/auth` [5]
-- [CORE-003](../stories/CORE-003-remove-mock-login-bypass.md) Remove mock login bypass [1]
-- [CORE-004](../stories/CORE-004-jwt-decode-helper.md) JWT decode helper [2]
-- [CORE-005](../stories/CORE-005-tenant-context-observable.md) `TenantContext` observable [3]
-- [CORE-006](../stories/CORE-006-audit-log-writer.md) Audit log writer [3]
-- [CORE-008](../stories/CORE-008-telemetry-sink.md) Sentry SDK + custom event sink [3]
-- [CORE-009](../stories/CORE-009-env-config-schemes.md) Debug/staging/prod schemes [2]
-- [AUTH-005](../stories/AUTH-005-biometric-sign-in.md) Biometric sign-in gap fill [5]
-- [AUTH-007](../stories/AUTH-007-sign-in-with-apple.md) Sign in with Apple [5]
-- [AUTH-008](../stories/AUTH-008-token-refresh-hardening.md) Token refresh hardening [5]
+- ✅ [CORE-001](../stories/CORE-001-api-client-mobile-prefix.md) APIClient `/api/mobile/*` + snake_case [3 pts] — **done** (base URL `/api`, every `*-actions.swift` hits `/mobile/...`, `keyDecodingStrategy = .convertFromSnakeCase` set on line 211)
+- ⚠️ [CORE-002](../stories/CORE-002-token-refresh-race-safe.md) Token refresh via `PUT /mobile/auth` [5] — **partial** (refresh works proactively via `restoreSession` + `ensureFreshToken`; 401 currently signs out instead of retry-and-refresh; no in-flight refresh guard)
+- ✅ [CORE-003](../stories/CORE-003-remove-mock-login-bypass.md) Remove mock login bypass [1] — **done** (no mock/bypass/fake matches in `auth-manager.swift`)
+- ✅ [CORE-004](../stories/CORE-004-jwt-decode-helper.md) JWT decode helper [2] — **done** (`TokenPayload.decode(from:)` in `auth-types.swift:54-110`, pure Swift base64url + JSON, extracts sub/exp/email/role/name/schoolId)
+- ✅ [CORE-005](../stories/CORE-005-tenant-context-observable.md) `TenantContext` observable [3] — **done** (`@Observable` `TenantContext` with `schoolId`/`school`/`subdomain`/`isValid`; `currentRole`/`currency` are nice-to-have extensions, not blockers)
+- ❌ [CORE-006](../stories/CORE-006-audit-log-writer.md) Audit log writer [3] — **not started** (no `audit-log.swift` anywhere)
+- ⚠️ [CORE-008](../stories/CORE-008-telemetry-sink.md) Sentry SDK + custom event sink [3] — **done in this branch** (Sentry SPM dep added to `project.yml`, `core/observability/sentry-bootstrap.swift` with PII-stripping `beforeSend`, init from `HogwartsApp.init()`, no-op when `SENTRY_DSN` empty); event taxonomy (OBS-002) still pending
+- ⚠️ [CORE-009](../stories/CORE-009-env-config-schemes.md) Debug/staging/prod schemes [2] — **partial** (single Hogwarts scheme with Debug/Release; staging config missing; `SENTRY_DSN` + `SENTRY_ENVIRONMENT` wired through Info.plist substitution but xcconfig per-config not yet)
+- ✅ [AUTH-005](../stories/AUTH-005-biometric-signin.md) Biometric sign-in gap fill [5] — **done** (`BiometricService` is `@Observable @MainActor` with full Face ID/Touch ID flow + enable/disable + lock/unlock; wired into `ContentView` via `@Environment` — `if biometricService.isBiometricEnabled && !biometricService.isUnlocked → BiometricPromptView`)
+- ✅ [AUTH-007](../stories/AUTH-007-sign-in-with-apple.md) Sign in with Apple [5] — **done** (`SignInWithAppleButton` in `login-view.swift:166`, `ASAuthorizationAppleIDCredential` handler in `auth-manager.swift:108`)
+- ⚠️ [AUTH-008](../stories/AUTH-008-token-refresh-hardening.md) Token refresh hardening [5] — **partial** — same scope as CORE-002 above
 
 **Phase B (engineer 2):** localization + design
 - F-LOCALE stories — Arabic-Indic digit formatter, locale-aware dates/currency, calendar

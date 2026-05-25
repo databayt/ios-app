@@ -13,6 +13,12 @@ struct HogwartsApp: App {
     @AppStorage("appTheme") private var appTheme: String = AppTheme.system.rawValue
     @AppStorage("selectedLanguage") private var selectedLanguage: String = ""
 
+    init() {
+        // Crash + telemetry sink. No-op when SENTRY_DSN is empty (debug default).
+        // OBS-001 / CORE-008.
+        SentryBootstrap.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

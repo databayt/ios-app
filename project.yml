@@ -40,6 +40,9 @@ packages:
   FacebookLogin:
     url: https://github.com/facebook/facebook-ios-sdk
     from: "16.0.0"
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    from: "8.36.0"
 
 targets:
   Hogwarts:
@@ -88,6 +91,10 @@ targets:
         FacebookAppID: "$(FACEBOOK_APP_ID)"
         FacebookClientToken: "$(FACEBOOK_CLIENT_TOKEN)"
         FacebookDisplayName: Hogwarts
+        # Sentry DSN — set per-environment via xcconfig or App Store Connect.
+        # Empty string disables crash reporting (Sentry init is no-op).
+        SENTRY_DSN: "$(SENTRY_DSN)"
+        SENTRY_ENVIRONMENT: "$(CONFIGURATION)"
     entitlements:
       path: hogwarts/resources/Hogwarts.entitlements
       properties:
@@ -105,6 +112,8 @@ targets:
       - package: GoogleSignIn
       - package: FacebookLogin
         product: FacebookLogin
+      - package: Sentry
+        product: Sentry
 
   HogwartsTests:
     type: bundle.unit-test

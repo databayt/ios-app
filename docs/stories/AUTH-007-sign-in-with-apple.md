@@ -3,7 +3,7 @@
 **Epic**: AUTH
 **Priority**: P0
 **Phase**: M0
-**Status**: pending
+**Status**: done
 **Effort**: M
 **Roles**: [admin, teacher, student, guardian, accountant, staff]
 **Multi-Tenant**: required
