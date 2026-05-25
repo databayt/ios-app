@@ -3,7 +3,7 @@
 **Epic**: F-SEARCH
 **Priority**: P1
 **Phase**: M1
-**Status**: pending
+**Status**: done
 **Effort**: M
 **Roles**: [admin, teacher, student, guardian, accountant, staff]
 **Multi-Tenant**: required

@@ -184,18 +184,22 @@ The **~75 M0 stories** below are the launch critical path. Every story has a ful
 
 ### Sprint 4 (weeks 7–8) — Phase F: ship it
 
-- [AUTH-014](../stories/AUTH-014-universal-links-deep-link.md) Universal Links (invite, reset, magic link) [5]
-- SRCH-001 Core Spotlight indexing [5]
-- SRCH-002 In-app universal search bar + NSUserActivity continuation [5]
-- INT-001 EventKit add-to-calendar [3]
-- INT-005 Photos library integration [2]
-- [SHIP-002](../stories/SHIP-002-app-store-assets.md) App Store assets EN+AR (6.7"/6.1"/iPad screenshots × 2 locales) [5]
-- [SHIP-003](../stories/SHIP-003-privacy-manifest-finalization.md) Privacy manifest finalization [3]
-- [SHIP-004](../stories/SHIP-004-export-compliance.md) Export compliance (encryption use declaration) [1]
-- [SHIP-005](../stories/SHIP-005-release-notes-template.md) Release notes EN+AR [1]
-- SHIP-007 App Review submission + appeal playbook [3]
+> **Status as of 2026-05-25** — every Apple-platform piece on the critical path now ships in code. EventKit + Photos picker were already wired (audited in Sprint 4). Universal Links + Core Spotlight + Spotlight result routing landed in `feat/sprint-4-audit`. Real remaining is **launch operations**: TestFlight setup (SHIP-001), Fastlane pipeline (SHIP-009), App Store Connect metadata + screenshots (SHIP-002), submission + appeal playbook (SHIP-007). Everything else either ships or needs only manual configuration.
 
-**Sprint 4 exit:** ✅ Tag `v1.0.0-rc1` on `main` → Fastlane builds & uploads to App Store Connect within 30 min. ✅ Privacy nutrition label complete, demo account `apple-review@databayt.org` works. ✅ Submission accepted (or feedback fixed-and-resubmitted within 24h).
+- ✅ [AUTH-014](../stories/AUTH-014-universal-links-auth.md) Universal Links (invite, reset, magic link) [5] — **done in this branch** (`com.apple.developer.associated-domains` entitlement set to `applinks:ed.databayt.org`; `core/routing/deep-link-router.swift` parses URL → typed `Destination` covering `/app/*` feature paths + `/auth/reset/*` + `/auth/verify/*` + `/invite/*`; `ContentView` `.onContinueUserActivity(NSUserActivityTypeBrowsingWeb)` and `.onOpenURL` both feed `NotificationNavigationState.shared`. Backend still needs to serve the AASA file at `https://ed.databayt.org/.well-known/apple-app-site-association` — separate hogwarts ticket already in the cross-team P0 list.)
+- ✅ [SRCH-001](../stories/SRCH-001-core-spotlight-indexing.md) Core Spotlight indexing [5] — **done in this branch** (`core/search/spotlight-indexer.swift` indexes announcements / conversations / contacts under tenant-scoped domain `org.databayt.Hogwarts.{schoolId}`; identifiers shaped `{type}:{id}` matching `DeepLinkRouter.destination(fromSpotlightIdentifier:)`; `wipe(schoolId:)` + `wipeAll()` for school-switch / sign-out; `ContentView` `.onContinueUserActivity(CSSearchableItemActionType)` routes taps. Grades/fees/attendance deliberately not indexed — privacy-sensitive.)
+- ❌ [SRCH-002](../stories/SRCH-002-universal-search-bar.md) In-app universal search bar + NSUserActivity continuation [5] — **not started** (UI feature: needs search bar + results list + multi-entity backend search. NSUserActivity continuation half is done by SRCH-001; the in-app UI is a separate story.)
+- ✅ [INT-001](../stories/INT-001-eventkit-add-to-calendar.md) EventKit add-to-calendar [3] — **done** (`event-detail-view.swift:160` has the full flow: `requestWriteOnlyAccessToEvents` iOS 17+ API, builds `EKEvent` from `SchoolEventDetail.resolvedRange()` with title/dates/location/notes, saves to default calendar with localized success/error toasts.)
+- ✅ [INT-005](../stories/INT-005-photos-library-integration.md) Photos library integration [2] — **done** (`PhotosUI` + `PhotosPicker` + `PhotosPickerItem` wired in `edit-profile-view.swift` for avatar; `NSPhotoLibraryUsageDescription` + `NSPhotoLibraryAddUsageDescription` in Info.plist.)
+- ❌ [SHIP-002](../stories/SHIP-002-app-store-assets.md) App Store assets EN+AR (6.7"/6.1"/iPad screenshots × 2 locales) [5] — **not started** (App Store Connect work; needs `xcrun simctl io screenshot` script + 5 critical-flow screenshots × 2 device sizes × 2 locales = 20 images, plus app preview video)
+- ✅ [SHIP-003](../stories/SHIP-003-privacy-manifest-finalization.md) Privacy manifest finalization [3] — **done in PR #30** (`PrivacyInfo.xcprivacy` has 10 collected data types + 4 API access reasons)
+- ✅ [SHIP-004](../stories/SHIP-004-export-compliance.md) Export compliance (encryption use declaration) [1] — **done** (`ITSAppUsesNonExemptEncryption: false` in `project.yml`)
+- ❌ [SHIP-005](../stories/SHIP-005-release-notes-template.md) Release notes EN+AR [1] — **not started** (template needed in `docs/release/release-notes-template.md`)
+- ❌ SHIP-007 App Review submission + appeal playbook [3] — **not started** (final step; depends on Fastlane + asset readiness)
+- ❌ [SHIP-001](../stories/SHIP-001-testflight-setup.md) TestFlight setup [3] — **not started** (TestFlight private beta config in App Store Connect)
+- ❌ [SHIP-009](../stories/SHIP-009-fastlane-testflight-pipeline.md) Fastlane + GitHub Actions TestFlight pipeline [3] — **not started** (no `fastlane/` dir yet; the bulk of remaining release infrastructure)
+
+**Sprint 4 exit (revised):** ✅ Universal Links open the app. ✅ Spotlight result taps route to the correct screen. ❌ Tag → TestFlight pipeline (SHIP-009). ❌ App Store Connect metadata + screenshots (SHIP-002 + SHIP-005). ❌ Submission accepted.
 
 ---
 

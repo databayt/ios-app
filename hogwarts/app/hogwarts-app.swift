@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import CoreSpotlight
 
 /// Main app entry point
 /// Mirrors: src/app/layout.tsx
@@ -89,6 +90,46 @@ struct ContentView: View {
                 biometricService.isUnlocked = true
             }
         }
+        // AUTH-014 — direct URL open (e.g. `hogwarts://` or http from
+        // a non-NSUserActivity source).
+        .onOpenURL { url in
+            handleDeepLink(url: url)
+        }
+        // AUTH-014 — Universal Links from Mail/Safari arrive as a
+        // `NSUserActivityTypeBrowsingWeb` activity whose `webpageURL`
+        // is the http(s) URL the user tapped.
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            handleDeepLink(url: url)
+        }
+        // SRCH-001 — Spotlight result taps surface as a
+        // `CSSearchableItemActionType` activity whose userInfo carries
+        // the item's unique identifier we registered in SpotlightIndexer.
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String else {
+                return
+            }
+            handleSpotlight(identifier: identifier)
+        }
+    }
+
+    /// Dispatch a URL → typed destination → navigation state mutation.
+    /// Unknown URLs are silently ignored (returning nil from the router).
+    private func handleDeepLink(url: URL) {
+        guard let destination = DeepLinkRouter.destination(from: url) else { return }
+        if let navDestination = destination.asNotificationDestination {
+            NotificationNavigationState.shared.navigate(to: navDestination)
+        }
+        // Auth-flow variants (passwordReset / emailVerification /
+        // inviteAccept) are picked up by LoginView's own observer.
+    }
+
+    private func handleSpotlight(identifier: String) {
+        guard let destination = DeepLinkRouter.destination(fromSpotlightIdentifier: identifier),
+              let navDestination = destination.asNotificationDestination else {
+            return
+        }
+        NotificationNavigationState.shared.navigate(to: navDestination)
     }
 
     /// Restore last selected school from keychain on session restore

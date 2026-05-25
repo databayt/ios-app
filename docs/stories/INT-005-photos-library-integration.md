@@ -3,7 +3,7 @@
 **Epic**: F-INTEGRATION
 **Priority**: P1
 **Phase**: M0
-**Status**: pending
+**Status**: done
 **Effort**: XS
 **Roles**: [admin, teacher, student, guardian, accountant, staff]
 **Multi-Tenant**: required

@@ -125,6 +125,13 @@ targets:
         # Without this entitlement, AppDelegate.didRegisterForRemoteNotifications
         # never fires on real devices. PUSH-001 / SHIP gate.
         aps-environment: $(APS_ENVIRONMENT)
+        # AUTH-014 — Universal Links. iOS associates ed.databayt.org with
+        # the app via /.well-known/apple-app-site-association (filed on
+        # the web side; ensure that endpoint is served before shipping).
+        # Tap on https://ed.databayt.org/app/* opens the app instead of
+        # Safari; reset + invite links route through DeepLinkRouter.
+        com.apple.developer.associated-domains:
+          - applinks:ed.databayt.org
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.databayt.Hogwarts
