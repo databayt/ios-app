@@ -104,6 +104,16 @@ targets:
         # Empty string disables crash reporting (Sentry init is no-op).
         SENTRY_DSN: "$(SENTRY_DSN)"
         SENTRY_ENVIRONMENT: "$(CONFIGURATION)"
+        # CORE-010 — SPKI SHA-256 pins (base64, comma-separated). Empty
+        # string in Debug = pinning disabled; populate per-config in
+        # xcconfig before flipping the prod cert. See certificate-pinning.swift
+        # for the rotation runbook.
+        TLS_PIN_SHA256_SET: "$(TLS_PIN_SHA256_SET)"
+        TLS_PIN_HOSTS: "ed.databayt.org"
+        # CORE-011 — Background refresh identifier. Must match the
+        # identifier in BGTaskScheduler.register.
+        BGTaskSchedulerPermittedIdentifiers:
+          - org.databayt.Hogwarts.refresh
     entitlements:
       path: hogwarts/resources/Hogwarts.entitlements
       properties:

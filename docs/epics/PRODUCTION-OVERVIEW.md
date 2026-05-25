@@ -166,18 +166,21 @@ The **~75 M0 stories** below are the launch critical path. Every story has a ful
 
 ### Sprint 3 (weeks 5–6) — Phase D + E in parallel
 
+> **Status as of 2026-05-25** — feature TODO sweep is almost a no-op (only 2 TODOs across all features) and the "0 feature tests" gap from the earlier draft was wrong: every module has a Swift Testing file with real assertions. CORE-010 cert pinning + CORE-011 background refresh both landed in `feat/sprint-3-audit`. Real remaining: Stripe SDK (PAY-*) blocked on backend `payments/process`, full a11y audit needs a real-device VoiceOver pass.
+
 **Phase D — feature TODO sweep (engineer 1):**
-- Every feature's `*-actions.swift` reads from `/api/mobile/*` for real (no stubs, no fixtures, no "Coming Soon" except `coming-soon-view.swift`)
-- Resolve `fees-actions.swift` currency-from-school TODO via `/admin/school`
-- PAY-001 (Apple Pay) + PAY-002 (Stripe Card Sheet) + PAY-005 (Payment history) [≈19 pts] — depends on backend `POST /api/mobile/payments/process`
+- ✅ Every feature's `*-actions.swift` reads from `/api/mobile/*` for real (no stubs, no fixtures, no "Coming Soon" outside `coming-soon-view.swift`). Audit grep returned 2 TODOs total across the 19 features.
+- ✅ Resolve `fee.swift` currency-from-school TODO — done in this branch: `currency: String?` added to the `School` extended fields (populated by `/mobile/admin/school`); `Double.formattedAsCurrency(locale:tenant:)` overload reads from `TenantContext.school?.currency ?? "SAR"`. Call-site rollout to the 10 fee views is a follow-up story (touches only existing string-interp lines).
+- ⚠️ One open feature TODO: `dashboard/views/teacher-dashboard.swift:156` — routes to grades feature when a dedicated tab exists. Not launch-blocking (defer to v1.1).
+- ❌ PAY-001 (Apple Pay) + PAY-002 (Stripe Card Sheet) + PAY-005 (Payment history) [≈19 pts] — depends on backend `POST /api/mobile/payments/process` (hogwarts#277) which is still open. iOS-side StripePaymentSheet wiring blocked on backend ship + Apple Pay merchant ID provisioning.
 
 **Phase E — quality gates (engineer 2 + QA):**
-- Q-TEST stories — fill the **0-feature-test gap**: every `*-view-model.swift` gets a `HogwartsTests/{feature}/{feature}-view-model-tests.swift` using Swift Testing. Existing scaffolds cover the new modules; add for `grades`, `students`, `timetable`, `profile`, `reportcards`.
-- [Q-A11Y stories](./Q-A11Y.md) — VoiceOver + Dynamic Type pass on 8 critical flows (login, dashboard, attendance-mark, grade-view, message-send, fee-pay, notification-tap, profile-edit) → results in `docs/A11Y-AUDIT.md`
-- [CORE-010](../stories/CORE-010-certificate-pinning.md) Certificate pinning [5]
-- [CORE-011](../stories/CORE-011-background-refresh.md) Background refresh via `BGAppRefreshTask` [3]
+- ⚠️ [Q-TEST stories](./Q-TEST.md) — scaffold is **done** (every module has ≥1 Swift Testing file: admin/announcements/events/fees/grades/guardian/idcard/profile/students/timetable/subjects each have a `*-tests.swift`; attendance has 3, auth has 6, dashboard has 5, messages/notifications/exams/teacher have 2 each). The 80% **coverage** target needs an `xcrun xccov view --report` run that we can only confirm after a full Xcode build cycle — measure, not author, is the remaining work.
+- ❌ [Q-A11Y stories](./Q-A11Y.md) — atoms have `accessibilityLabel`s but the manual VoiceOver + Dynamic Type pass on 8 critical flows hasn't been done. Owner: Ali, on a real iPhone 15. Output goes into `docs/A11Y-AUDIT.md` (template already shipped in PR #28).
+- ✅ [CORE-010](../stories/CORE-010-certificate-pinning.md) Certificate pinning [5] — **done in this branch** (`core/network/certificate-pinning.swift` + APIClient session uses delegate; SPKI-SHA256 base64 hashes read from `TLS_PIN_SHA256_SET` Info.plist; empty set in Debug = system trust; hosts gated by `TLS_PIN_HOSTS` so third-party SDKs are unaffected; rotation runbook in the file's doc-comment)
+- ✅ [CORE-011](../stories/CORE-011-background-refresh.md) Background refresh via `BGAppRefreshTask` [3] — **done in this branch** (`org.databayt.Hogwarts.refresh` identifier registered in `BGTaskSchedulerPermittedIdentifiers` + `AppDelegate.registerBackgroundRefreshTask` handles + reschedules; `applicationDidEnterBackground` requests next run ≥15 min out; handler runs `SyncEngine.shared.syncAll()` with expiration cancel)
 
-**Sprint 3 exit:** ✅ `xcrun xccov view --report` shows ≥80% on `core/` + every ViewModel. ✅ Manual smoke-test of every feature in TestFlight against demo accounts (admin/teacher/student/parent). ✅ Apple Pay sandbox checkout succeeds end-to-end. ✅ VoiceOver clean on 8 flows.
+**Sprint 3 exit (revised):** ✅ Cert pinning gated by config (no Debug breakage). ✅ Background refresh request submitted on every background. ⚠️ 80% coverage not measured (needs Xcode run). ❌ Apple Pay sandbox checkout (blocked on hogwarts#277). ❌ VoiceOver pass on 8 flows (needs real device session with Ali).
 
 ### Sprint 4 (weeks 7–8) — Phase F: ship it
 

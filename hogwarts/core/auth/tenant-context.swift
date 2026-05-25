@@ -52,6 +52,11 @@ struct School: Codable, Identifiable {
     let plan: SchoolPlan?
     let maxStudents: Int?
     let maxTeachers: Int?
+    /// ISO 4217 currency code (e.g. "SAR", "USD"). Populated from
+    /// `/mobile/admin/school`. Fee + invoice formatting reads this
+    /// (see fee.swift `formattedAsCurrency`) — falls back to "SAR" for
+    /// the pilot until the admin endpoint is fetched.
+    let currency: String?
 
     enum SchoolPlan: String, Codable {
         case basic = "BASIC"

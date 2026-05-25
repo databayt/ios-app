@@ -1,5 +1,6 @@
 import UIKit
 import UserNotifications
+import BackgroundTasks
 import GoogleSignIn
 import FacebookCore
 import os
@@ -8,6 +9,10 @@ import os
 /// Handles APNs registration, notification delivery, and OAuth callbacks
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
+    /// CORE-011 — Background-refresh identifier. Must match the entry in
+    /// Info.plist's `BGTaskSchedulerPermittedIdentifiers`.
+    private static let backgroundRefreshIdentifier = "org.databayt.Hogwarts.refresh"
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -15,11 +20,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         UNUserNotificationCenter.current().delegate = self
         registerNotificationCategories()
         registerForPushNotifications()
+        registerBackgroundRefreshTask()
 
         // Initialize Facebook SDK
         ApplicationDelegate.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
 
         return true
+    }
+
+    /// CORE-011 — Schedule a fresh sync attempt whenever the app backgrounds.
+    /// iOS decides when to actually run it; we just ask for "≥ 15 min from now."
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        scheduleBackgroundRefresh()
     }
 
     /// PUSH-002 — re-validate APNs registration when the app returns to
@@ -62,6 +74,48 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             } catch {
                 Logger.app.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
             }
+        }
+    }
+
+    // MARK: - Background Refresh (CORE-011)
+
+    /// Register the BGAppRefreshTask handler exactly once during launch.
+    /// The handler asks SyncEngine to flush, then reschedules itself so
+    /// the cadence continues across cold launches.
+    private func registerBackgroundRefreshTask() {
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: Self.backgroundRefreshIdentifier,
+            using: nil
+        ) { task in
+            self.handleBackgroundRefresh(task: task as! BGAppRefreshTask)
+        }
+    }
+
+    private func handleBackgroundRefresh(task: BGAppRefreshTask) {
+        // Reschedule first — if the work crashes, the system has already
+        // accepted our next request and won't punish us for the failure.
+        scheduleBackgroundRefresh()
+
+        let syncTask = Task {
+            await SyncEngine.shared.syncAll()
+            task.setTaskCompleted(success: true)
+        }
+
+        task.expirationHandler = {
+            syncTask.cancel()
+            task.setTaskCompleted(success: false)
+        }
+    }
+
+    private func scheduleBackgroundRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshIdentifier)
+        // 15 min is the lowest value iOS honors meaningfully; the system
+        // may delay further based on battery + usage patterns.
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            Logger.app.error("Failed to schedule background refresh: \(error.localizedDescription, privacy: .public)")
         }
     }
 

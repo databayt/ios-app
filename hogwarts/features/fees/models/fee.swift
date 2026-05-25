@@ -118,9 +118,17 @@ enum FeeStatus: String, CaseIterable, Sendable, Hashable {
 
 extension Double {
     /// Format a fee amount using the active locale + tenant currency.
-    /// TODO: pull `currency` from the active `School` model when we add a
-    /// `/mobile/schools/me` endpoint; SAR is a safe default for the pilot.
+    /// Pass `currencyCode: tenantContext.school?.currency ?? "SAR"` from
+    /// the call site once `/mobile/admin/school` has populated the
+    /// extended School fields; SAR remains the safe pilot default.
     func formattedAsCurrency(locale: Locale, currencyCode: String = "SAR") -> String {
         formatted(.currency(code: currencyCode).locale(locale))
+    }
+
+    /// Convenience overload reading the active tenant's currency.
+    /// Equivalent to `formattedAsCurrency(locale:currencyCode:)` but
+    /// keeps fees views from having to repeat the nil-coalesce.
+    func formattedAsCurrency(locale: Locale, tenant: TenantContext) -> String {
+        formattedAsCurrency(locale: locale, currencyCode: tenant.school?.currency ?? "SAR")
     }
 }

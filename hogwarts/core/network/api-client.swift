@@ -53,7 +53,16 @@ actor APIClient: APIClientProtocol {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
-        self.session = URLSession(configuration: config)
+
+        // CORE-010 — SPKI pinning. Falls back to system trust when the
+        // Info.plist pin set is empty (default in Debug), so dev builds
+        // never break against staging.
+        let pinningDelegate = CertificatePinningDelegate()
+        self.session = URLSession(
+            configuration: config,
+            delegate: pinningDelegate,
+            delegateQueue: nil
+        )
     }
 
     /// Set callback for 401 responses
