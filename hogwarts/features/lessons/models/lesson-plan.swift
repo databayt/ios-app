@@ -56,14 +56,14 @@ enum TopicStatus: String, Codable {
     }
 }
 
-struct LessonActivity: Codable, Equatable, Identifiable {
+struct LessonActivity: Codable, Equatable, Hashable, Identifiable {
     var id: UUID = UUID()
     var description: String
     var duration: Int
     var type: ActivityType
 }
 
-struct LessonResource: Codable, Equatable, Identifiable {
+struct LessonResource: Codable, Equatable, Hashable, Identifiable {
     let id: String
     let name: String
     let type: ResourceType
@@ -71,7 +71,7 @@ struct LessonResource: Codable, Equatable, Identifiable {
     let fileSize: Int64?
 }
 
-struct LessonPlan: Codable, Equatable, Identifiable {
+struct LessonPlan: Codable, Equatable, Hashable, Identifiable {
     let id: String
     let schoolId: String
     let classId: String

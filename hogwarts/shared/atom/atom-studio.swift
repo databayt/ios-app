@@ -20,14 +20,14 @@ struct AtomStudio: View {
 
                     // ── Button ──────────────────────────
                     section("HWButton") {
-                        HWButton(title: "Default", variant: .default) {}
-                        HWButton(title: "Secondary", variant: .secondary) {}
-                        HWButton(title: "Outline", variant: .outline) {}
-                        HWButton(title: "Ghost", variant: .ghost) {}
-                        HWButton(title: "Destructive", variant: .destructive) {}
-                        HWButton(title: "Link", variant: .link) {}
-                        HWButton(title: "Loading...", isLoading: true) {}
-                        HWButton(title: "Small", size: .sm, isFullWidth: false) {}
+                        HWButton("Default", variant: .default) {}
+                        HWButton("Secondary", variant: .secondary) {}
+                        HWButton("Outline", variant: .outline) {}
+                        HWButton("Ghost", variant: .ghost) {}
+                        HWButton("Destructive", variant: .destructive) {}
+                        HWButton("Link", variant: .link) {}
+                        HWButton("Loading...", isLoading: true) {}
+                        HWButton("Small", size: .sm, isFullWidth: false) {}
                     }
 
                     // ── TextField ────────────────────────
@@ -68,7 +68,7 @@ struct AtomStudio: View {
 
                     // ── DividerWithText ──────────────────
                     section("HWDividerWithText") {
-                        HWDividerWithText(text: "or continue with")
+                        HWDividerWithText("or continue with")
                     }
 
                     // ── SectionHeader ────────────────────

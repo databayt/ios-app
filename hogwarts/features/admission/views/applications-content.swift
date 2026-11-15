@@ -66,7 +66,7 @@ private struct ApplicationRow: View {
                 Text("\(application.personalInfo.givenNameEn) \(application.personalInfo.familyNameEn)")
                     .font(.headline)
                 Spacer()
-                StatusBadge(status: application.status)
+                ApplicationStatusBadge(status: application.status)
             }
             if let tracking = application.trackingNumber {
                 Text("admission.tracking \(tracking)")
@@ -81,7 +81,7 @@ private struct ApplicationRow: View {
     }
 }
 
-private struct StatusBadge: View {
+private struct ApplicationStatusBadge: View {
     let status: ApplicationStatus
 
     var body: some View {

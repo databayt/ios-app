@@ -8,6 +8,9 @@ final class TenantContext {
     /// Current school ID (tenant identifier)
     var schoolId: String?
 
+    /// Alias used by feature view models
+    var currentSchoolId: String? { schoolId }
+
     /// Current school details
     var school: School?
 

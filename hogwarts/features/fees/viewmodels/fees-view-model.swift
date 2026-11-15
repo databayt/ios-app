@@ -4,7 +4,7 @@ import SwiftUI
 @MainActor
 @Observable
 final class FeesViewModel {
-    private(set) var items: [FeeRecord] = []
+    internal(set) var items: [FeeRecord] = []
     private(set) var summary: FeeSummary?
     private(set) var isLoading = false
     private(set) var lastError: String?

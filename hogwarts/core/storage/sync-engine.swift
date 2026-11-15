@@ -84,6 +84,7 @@ actor SyncEngine {
 
     // MARK: - Pending Actions Processing
 
+    @MainActor
     private func processPendingActions() async {
         await MainActor.run {
             let context = DataContainer.shared.modelContext
@@ -98,7 +99,7 @@ actor SyncEngine {
             guard let pendingActions = try? context.fetch(descriptor) else { return }
 
             for action in pendingActions {
-                Task {
+                Task { @MainActor in
                     await processAction(action, context: context)
                 }
             }
@@ -159,6 +160,7 @@ actor SyncEngine {
 
     // MARK: - Entity Sync Methods
 
+    @MainActor
     private func syncStudents() async {
         await MainActor.run {
             let context = DataContainer.shared.modelContext
@@ -169,7 +171,7 @@ actor SyncEngine {
             guard let user = try? context.fetch(userDescriptor).first,
                   let schoolId = user.schoolId else { return }
 
-            Task {
+            Task { @MainActor in
                 do {
                     let response: StudentsResponse = try await api.get(
                         "/students",
@@ -204,6 +206,7 @@ actor SyncEngine {
         }
     }
 
+    @MainActor
     private func syncAttendance() async {
         await MainActor.run {
             let context = DataContainer.shared.modelContext
@@ -214,7 +217,7 @@ actor SyncEngine {
             guard let user = try? context.fetch(userDescriptor).first,
                   let schoolId = user.schoolId else { return }
 
-            Task {
+            Task { @MainActor in
                 do {
                     // Fetch last 30 days of attendance
                     let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
@@ -257,6 +260,7 @@ actor SyncEngine {
         }
     }
 
+    @MainActor
     private func syncGrades() async {
         await MainActor.run {
             let context = DataContainer.shared.modelContext
@@ -267,7 +271,7 @@ actor SyncEngine {
             guard let user = try? context.fetch(userDescriptor).first,
                   let schoolId = user.schoolId else { return }
 
-            Task {
+            Task { @MainActor in
                 do {
                     let response: ExamResultsResponse = try await api.get(
                         "/grades/results",
@@ -302,6 +306,7 @@ actor SyncEngine {
         }
     }
 
+    @MainActor
     private func syncMessages() async {
         // Fetch recent conversations and cache in SwiftData
         await MainActor.run {
@@ -314,7 +319,7 @@ actor SyncEngine {
             guard let user = try? context.fetch(userDescriptor).first,
                   let schoolId = user.schoolId else { return }
 
-            Task {
+            Task { @MainActor in
                 do {
                     let conversations: [Conversation] = try await api.get(
                         "/conversations",
@@ -352,6 +357,7 @@ actor SyncEngine {
         }
     }
 
+    @MainActor
     private func syncNotifications() async {
         // Fetch recent notifications and cache in SwiftData
         await MainActor.run {
@@ -364,7 +370,7 @@ actor SyncEngine {
             guard let user = try? context.fetch(userDescriptor).first,
                   let schoolId = user.schoolId else { return }
 
-            Task {
+            Task { @MainActor in
                 do {
                     let notifications: [AppNotification] = try await api.get(
                         "/notifications",

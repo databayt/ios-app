@@ -68,7 +68,7 @@ final class ExamsActions: Sendable {
 
     /// Final graded result — call after submission has been graded
     /// (essays may take a teacher's review before this is available).
-    func result(examId: String) async throws -> ExamResult {
-        try await api.get("/mobile/exams/\(examId)/results", as: ExamResult.self)
+    func result(examId: String) async throws -> ExamAttemptResult {
+        try await api.get("/mobile/exams/\(examId)/results", as: ExamAttemptResult.self)
     }
 }

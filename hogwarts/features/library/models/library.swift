@@ -26,7 +26,7 @@ enum BookCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct Book: Codable, Equatable, Identifiable {
+struct Book: Codable, Equatable, Hashable, Identifiable {
     let id: String
     let title: String
     let author: String

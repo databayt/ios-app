@@ -191,14 +191,12 @@ struct IDCardContent: View {
     }
 
     private func metadataGrid(user: IDCardUser) -> some View {
-        let rows: [(LocalizedStringResource, String?)] = [
+        let allRows: [(LocalizedStringResource, String?)] = [
             ("idcard.field.idNumber", user.idNumber),
             ("idcard.field.bloodGroup", user.bloodGroup),
             ("idcard.field.email", user.email),
-        ].compactMap { (key, value) in
-            guard let v = value, !v.isEmpty else { return nil }
-            return (key, v)
-        }
+        ]
+        let rows = allRows.filter { !($0.1 ?? "").isEmpty }
 
         return VStack(spacing: 0) {
             ForEach(rows.indices, id: \.self) { i in

@@ -202,14 +202,14 @@ struct ExamAnswerEntry: Codable, Sendable {
     }
 }
 
-struct ExamSubmissionResponse: Codable, Sendable {
+struct ExamSubmissionResponse: Codable, Hashable, Sendable {
     let submitted: Bool
     let autoGradedScore: Int?
     let totalQuestions: Int
     let answeredCount: Int
 }
 
-struct ExamResult: Codable, Sendable {
+struct ExamAttemptResult: Codable, Sendable {
     let examTitle: String
     let score: Double
     let maxScore: Double

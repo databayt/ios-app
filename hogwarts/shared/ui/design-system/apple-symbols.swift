@@ -76,6 +76,7 @@ extension AppleSymbol {
 
 // MARK: - Common Symbol Factory
 
+@MainActor
 enum AppleSymbols {
     // Navigation
     static let home = AppleSymbol("house.fill")

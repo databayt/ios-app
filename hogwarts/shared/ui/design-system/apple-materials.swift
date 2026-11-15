@@ -70,27 +70,27 @@ extension View {
 
 // MARK: - Elevation Styles
 
-extension View {
-    enum ElevationLevel {
-        case flat
-        case low
-        case medium
-        case high
+enum ElevationLevel {
+    case flat
+    case low
+    case medium
+    case high
 
-        var shadow: (color: Color, radius: CGFloat, y: CGFloat) {
-            switch self {
-            case .flat:
-                return (.clear, 0, 0)
-            case .low:
-                return (.black.opacity(0.05), 4, 2)
-            case .medium:
-                return (.black.opacity(0.08), 12, 4)
-            case .high:
-                return (.black.opacity(0.12), 20, 8)
-            }
+    var shadow: (color: Color, radius: CGFloat, y: CGFloat) {
+        switch self {
+        case .flat:
+            return (.clear, 0, 0)
+        case .low:
+            return (.black.opacity(0.05), 4, 2)
+        case .medium:
+            return (.black.opacity(0.08), 12, 4)
+        case .high:
+            return (.black.opacity(0.12), 20, 8)
         }
     }
+}
 
+extension View {
     /// Apply elevation shadow to any view
     /// - Parameter level: Elevation level (flat, low, medium, high)
     func elevation(_ level: ElevationLevel) -> some View {
@@ -140,24 +140,6 @@ extension View {
 extension Color {
     /// Apple's accent blue
     static let appleBlue = Color(red: 0, green: 0.478, blue: 1)
-
-    /// Apple's system gray 1 (lightest)
-    static let appleGray1 = Color(UIColor.systemGray)
-
-    /// Apple's system gray 2
-    static let appleGray2 = Color(UIColor.systemGray2)
-
-    /// Apple's system gray 3
-    static let appleGray3 = Color(UIColor.systemGray3)
-
-    /// Apple's system gray 4
-    static let appleGray4 = Color(UIColor.systemGray4)
-
-    /// Apple's system gray 5
-    static let appleGray5 = Color(UIColor.systemGray5)
-
-    /// Apple's system gray 6 (darkest)
-    static let appleGray6 = Color(UIColor.systemGray6)
 }
 
 // MARK: - Background Modifiers
@@ -177,4 +159,20 @@ extension View {
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
     }
+}
+
+// MARK: - Shape + row-height tokens (Apple iOS 26 kit)
+
+/// Corner radii used by atoms.
+enum HWShape {
+    static let card: CGFloat = 26
+    static let button: CGFloat = 16
+    static let textField: CGFloat = 12
+}
+
+/// Row heights used by atoms.
+enum HWRowHeight {
+    static let minTouchTarget: CGFloat = 44
+    static let standard: CGFloat = 44
+    static let subtitle: CGFloat = 62
 }

@@ -70,6 +70,9 @@ struct NotificationRouter {
 @Observable
 @MainActor
 final class NotificationNavigationState {
+    /// Shared instance so App Intents (Siri / shortcuts) and the app drive the same state
+    static let shared = NotificationNavigationState()
+
     var selectedTab: AppTab = .dashboard
     var pendingDestination: NotificationRouter.Destination?
 

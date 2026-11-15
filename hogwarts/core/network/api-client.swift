@@ -71,6 +71,15 @@ actor APIClient {
         try await request(path, method: .put, body: body)
     }
 
+    /// PATCH request
+    func patch<T: Decodable, B: Encodable>(
+        _ path: String,
+        body: B,
+        as type: T.Type = T.self
+    ) async throws -> T {
+        try await request(path, method: .patch, body: body)
+    }
+
     /// DELETE request
     func delete(_ path: String) async throws {
         let _: EmptyResponse = try await request(path, method: .delete)

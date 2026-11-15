@@ -106,7 +106,7 @@ struct SubjectsContent: View {
             Image(systemName: "books.vertical")
                 .font(.system(size: 44))
                 .foregroundStyle(.tertiary)
-            Text(viewModel.scope == .mine
+            (viewModel.scope == .mine
                  ? Text("subjects.empty.mine")
                  : Text("subjects.empty.catalog"))
             .font(.headline)

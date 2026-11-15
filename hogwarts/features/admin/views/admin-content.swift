@@ -150,7 +150,7 @@ private struct SchoolCard: View {
             ZStack {
                 Circle().fill(Color.accentBlue.opacity(0.15))
                 Image(systemName: "graduationcap.fill")
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(Color.accentColor)
                     .font(.title3)
             }
             .frame(width: 44, height: 44)

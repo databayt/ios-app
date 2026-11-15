@@ -92,7 +92,7 @@ struct MainTabView: View {
     @Environment(AuthManager.self) private var authManager
 
     @State private var selectedTab: AppTab = .dashboard
-    @State private var navigationState = NotificationNavigationState()
+    @State private var navigationState = NotificationNavigationState.shared
 
     private var role: UserRole {
         authManager.role

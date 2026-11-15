@@ -240,3 +240,19 @@ extension Color {
     /// Glass dark — 25% white over content
     static let glassDarkBackground = Color.white.opacity(0.25)
 }
+
+// MARK: - ShapeStyle shorthands (so `.foregroundStyle(.accentBlue)` resolves)
+
+extension ShapeStyle where Self == Color {
+    static var accentBlue: Color { Color.accentBlue }
+    static var accentPurple: Color { Color.accentPurple }
+    static var accentGreen: Color { Color.accentGreen }
+    static var accentOrange: Color { Color.accentOrange }
+    static var accentRed: Color { Color.accentRed }
+    static var accentTeal: Color { Color.accentTeal }
+    static var accentIndigo: Color { Color.accentIndigo }
+    static var accentPink: Color { Color.accentPink }
+    static var accentYellow: Color { Color.accentYellow }
+    static var fillTertiary: Color { Color.fillTertiary }
+    static var hogwartsError: Color { Color.hogwartsError }
+}

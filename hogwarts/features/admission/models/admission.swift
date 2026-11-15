@@ -44,7 +44,7 @@ enum ApplicationStep: Int, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct PersonalInfo: Codable, Equatable {
+struct PersonalInfo: Codable, Equatable, Hashable {
     var givenNameEn: String = ""
     var familyNameEn: String = ""
     var givenNameAr: String = ""
@@ -55,7 +55,7 @@ struct PersonalInfo: Codable, Equatable {
     var nationalId: String = ""
 }
 
-struct ContactInfo: Codable, Equatable {
+struct ContactInfo: Codable, Equatable, Hashable {
     var address: String = ""
     var city: String = ""
     var countryCode: String = "+966"
@@ -63,7 +63,7 @@ struct ContactInfo: Codable, Equatable {
     var email: String = ""
 }
 
-struct GuardianInfo: Codable, Equatable, Identifiable {
+struct GuardianInfo: Codable, Equatable, Hashable, Identifiable {
     var id: UUID = UUID()
     var name: String = ""
     var relationship: String = ""
@@ -72,7 +72,7 @@ struct GuardianInfo: Codable, Equatable, Identifiable {
     var email: String = ""
 }
 
-struct AcademicHistory: Codable, Equatable {
+struct AcademicHistory: Codable, Equatable, Hashable {
     var previousSchool: String = ""
     var lastGrade: String = ""
     var applyingGrade: String = ""
@@ -80,7 +80,7 @@ struct AcademicHistory: Codable, Equatable {
     var specialNeedsDetails: String = ""
 }
 
-struct AdmissionDocument: Codable, Equatable, Identifiable {
+struct AdmissionDocument: Codable, Equatable, Hashable, Identifiable {
     var id: String = UUID().uuidString
     var name: String
     var type: String
@@ -88,7 +88,7 @@ struct AdmissionDocument: Codable, Equatable, Identifiable {
     var uploadedAt: String? = nil
 }
 
-struct AdmissionApplication: Codable, Equatable, Identifiable {
+struct AdmissionApplication: Codable, Equatable, Hashable, Identifiable {
     var id: String = UUID().uuidString
     var trackingNumber: String? = nil
     var status: ApplicationStatus = .draft
