@@ -106,10 +106,15 @@ struct EmailPasswordTests {
 
     @Test("SignInRequest encodes correctly")
     func signInRequestEncoding() throws {
-        let request = SignInRequest(email: "test@test.com", password: "secret")
+        let request = SignInRequest(identifier: "test@test.com", password: "secret")
         let data = try JSONEncoder().encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        #expect(json?["email"] as? String == "test@test.com")
+        #expect(json?["identifier"] as? String == "test@test.com")
         #expect(json?["password"] as? String == "secret")
+        #expect(json?["school"] == nil)
+
+        let coded = SignInRequest(identifier: "260001", password: "secret", school: "myschool")
+        let codedJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(coded)) as? [String: Any]
+        #expect(codedJSON?["school"] as? String == "myschool")
     }
 }

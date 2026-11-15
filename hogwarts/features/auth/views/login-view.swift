@@ -13,7 +13,7 @@ struct LoginView: View {
     @FocusState private var focusedField: LoginField?
 
     enum LoginField {
-        case email, password
+        case identifier, school, password
     }
 
     var body: some View {
@@ -39,25 +39,52 @@ struct LoginView: View {
 
                     // Login form
                     VStack(spacing: 16) {
-                        // Email field
+                        // Email or login code field
                         VStack(alignment: .leading, spacing: 4) {
-                            TextField(String(localized: "login.email"), text: $viewModel.email)
+                            TextField(
+                                String(localized: "auth.identifier.placeholder", defaultValue: "Email or login code"),
+                                text: $viewModel.identifier
+                            )
                                 .textFieldStyle(.roundedBorder)
-                                .textContentType(.emailAddress)
+                                .textContentType(.username)
                                 .keyboardType(.emailAddress)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
-                                .focused($focusedField, equals: .email)
+                                .focused($focusedField, equals: .identifier)
                                 .submitLabel(.next)
-                                .onSubmit { focusedField = .password }
-                                .onChange(of: viewModel.email) { viewModel.onEmailChanged() }
+                                .onSubmit { focusedField = viewModel.showsSchoolField ? .school : .password }
+                                .onChange(of: viewModel.identifier) { viewModel.onIdentifierChanged() }
                                 .accessibilityLabel(String(localized: "a11y.login.email"))
                                 .accessibilityHint(String(localized: "a11y.hint.enterEmail"))
 
-                            if let emailError = viewModel.emailError {
-                                Text(emailError)
+                            if let identifierError = viewModel.identifierError {
+                                Text(identifierError)
                                     .font(.caption)
                                     .foregroundStyle(.red)
+                            }
+                        }
+
+                        // School field — only for login codes / usernames
+                        if viewModel.showsSchoolField {
+                            VStack(alignment: .leading, spacing: 4) {
+                                TextField(
+                                    String(localized: "auth.school.placeholder", defaultValue: "School (e.g. myschool)"),
+                                    text: $viewModel.school
+                                )
+                                    .textFieldStyle(.roundedBorder)
+                                    .keyboardType(.URL)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                                    .focused($focusedField, equals: .school)
+                                    .submitLabel(.next)
+                                    .onSubmit { focusedField = .password }
+                                    .onChange(of: viewModel.school) { viewModel.onSchoolChanged() }
+
+                                if let schoolError = viewModel.schoolError {
+                                    Text(schoolError)
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
                             }
                         }
 

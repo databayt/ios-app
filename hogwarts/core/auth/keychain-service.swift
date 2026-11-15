@@ -11,6 +11,7 @@ final class KeychainService {
         case deviceToken = "com.hogwarts.deviceToken"
         case lastSchoolId = "com.hogwarts.lastSchoolId"
         case biometricEnabled = "com.hogwarts.biometricEnabled"
+        case sessionUser = "com.hogwarts.sessionUser"
     }
 
     private let serviceName = "com.hogwarts.ios"

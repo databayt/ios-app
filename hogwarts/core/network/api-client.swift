@@ -1,5 +1,51 @@
 import Foundation
 
+/// Base-URL resolution + URL joining (pure, unit-tested)
+enum APIConfig {
+    static let defaultBaseURL = "https://balqalam.com/api"
+
+    /// `HWAPIBaseURL` from Info.plist; falls back to production when missing, empty,
+    /// unexpanded (`$(HOGWARTS_API_BASE)`) or not an http(s) URL.
+    static func resolveBaseURL(_ raw: Any?) -> URL {
+        let fallback = URL(string: defaultBaseURL)!
+        guard var value = (raw as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty, !value.contains("$(") else { return fallback }
+        while value.hasSuffix("/") { value.removeLast() }
+        guard let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              url.host != nil else { return fallback }
+        return url
+    }
+
+    static var baseURL: URL {
+        resolveBaseURL(Bundle.main.object(forInfoDictionaryKey: "HWAPIBaseURL"))
+    }
+
+    /// Join base + path ("/x", "x", or "x?a=b") + extra query items.
+    static func makeURL(base: URL, path: String, query: [String: String]? = nil) -> URL {
+        var root = base.absoluteString
+        while root.hasSuffix("/") { root.removeLast() }
+        var trimmed = Substring(path)
+        while trimmed.hasPrefix("/") { trimmed = trimmed.dropFirst() }
+        guard var components = URLComponents(string: root + "/" + trimmed) else { return base }
+        if let query, !query.isEmpty {
+            var items = components.queryItems ?? []
+            items += query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+            components.queryItems = items
+        }
+        return components.url ?? base
+    }
+}
+
+/// Result of a token refresh attempt (reported by AuthManager)
+enum RefreshOutcome: Sendable {
+    case refreshed
+    /// Refresh token rejected (401/403): the session is over
+    case sessionOver
+    /// Network / server trouble: keep the session, fail this request
+    case transient
+}
+
 /// API client for Hogwarts backend
 /// Mirrors: Server actions pattern from actions.ts files
 actor APIClient {
@@ -9,17 +55,20 @@ actor APIClient {
     private let baseURL: URL
     private let keychain = KeychainService()
 
-    /// Called when a 401 response is received
+    /// Called when the session is over (refresh rejected / no way to refresh)
     private var onUnauthorized: (@Sendable () async -> Void)?
 
     /// Dynamic authorization token provider (injected by AuthManager)
     private var authorizationProvider: (@Sendable () -> String?)?
 
+    /// Refreshes the token (injected by AuthManager)
+    private var refreshHandler: (@Sendable () async -> RefreshOutcome)?
+
+    /// The single in-flight refresh; concurrent 401s await it instead of starting another
+    private var refreshTask: Task<RefreshOutcome, Never>?
+
     private init() {
-        guard let url = URL(string: "https://ed.databayt.org/api") else {
-            fatalError("Invalid base URL")
-        }
-        self.baseURL = url
+        self.baseURL = APIConfig.baseURL
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -27,7 +76,7 @@ actor APIClient {
         self.session = URLSession(configuration: config)
     }
 
-    /// Set callback for 401 responses
+    /// Set callback for an ended session
     func setOnUnauthorized(_ handler: @escaping @Sendable () async -> Void) {
         self.onUnauthorized = handler
     }
@@ -35,6 +84,15 @@ actor APIClient {
     /// Set dynamic token provider (AuthManager injects this for proactive refresh)
     func setAuthorizationProvider(_ provider: @escaping @Sendable () -> String?) {
         self.authorizationProvider = provider
+    }
+
+    /// Set the refresh handler used on a 401
+    func setRefreshHandler(_ handler: @escaping @Sendable () async -> RefreshOutcome) {
+        self.refreshHandler = handler
+    }
+
+    private func currentToken() -> String? {
+        authorizationProvider?() ?? keychain.get(.accessToken)
     }
 
     // MARK: - HTTP Methods
@@ -125,26 +183,65 @@ actor APIClient {
         throw lastError ?? APIError.unknown(0)
     }
 
+    /// Send once; on 401 try ONE serialized refresh, retry once, else end the session.
     private func performRequest<T: Decodable>(
         _ path: String,
         method: HTTPMethod,
         query: [String: String]? = nil,
         body: (any Encodable)? = nil
     ) async throws -> T {
-        var url = baseURL.appendingPathComponent(path)
-
-        // Add query parameters
-        if let query = query, var components = URLComponents(url: url, resolvingAgainstBaseURL: true) {
-            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
-            url = components.url ?? url
+        let token = currentToken()
+        do {
+            return try await send(path, method: method, query: query, body: body, token: token)
+        } catch APIError.unauthorized {
+            guard token != nil, refreshHandler != nil else {
+                await onUnauthorized?()
+                throw APIError.unauthorized
+            }
+            switch await refresh(staleToken: token) {
+            case .refreshed:
+                do {
+                    return try await send(path, method: method, query: query, body: body, token: currentToken())
+                } catch APIError.unauthorized {
+                    await onUnauthorized?()
+                    throw APIError.unauthorized
+                }
+            case .sessionOver:
+                await onUnauthorized?()
+                throw APIError.unauthorized
+            case .transient:
+                throw APIError.unauthorized
+            }
         }
+    }
+
+    /// Serialized refresh: concurrent callers share one in-flight task
+    private func refresh(staleToken: String?) async -> RefreshOutcome {
+        // Another request already refreshed while this one was in flight
+        if let current = currentToken(), current != staleToken { return .refreshed }
+        if let running = refreshTask { return await running.value }
+        guard let handler = refreshHandler else { return .sessionOver }
+        let task = Task { await handler() }
+        refreshTask = task
+        let outcome = await task.value
+        refreshTask = nil
+        return outcome
+    }
+
+    private func send<T: Decodable>(
+        _ path: String,
+        method: HTTPMethod,
+        query: [String: String]?,
+        body: (any Encodable)?,
+        token: String?
+    ) async throws -> T {
+        let url = APIConfig.makeURL(base: baseURL, path: path, query: query)
 
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Add auth header (prefer dynamic provider, fallback to keychain)
-        if let token = authorizationProvider?() ?? keychain.get(.accessToken) {
+        if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -166,7 +263,6 @@ actor APIClient {
             return try decoder.decode(T.self, from: data)
 
         case 401:
-            await onUnauthorized?()
             throw APIError.unauthorized
 
         case 403:
@@ -185,6 +281,33 @@ actor APIClient {
         default:
             throw APIError.unknown(httpResponse.statusCode)
         }
+    }
+
+    // MARK: - Unauthenticated (auth endpoints)
+
+    /// Request without the bearer header and without the 401-refresh path.
+    /// Non-2xx throws `APIError.http` carrying the server's `{error, code}` body.
+    func authRequest<T: Decodable>(
+        _ path: String,
+        method: HTTPMethod,
+        headers: [String: String] = [:],
+        body: (any Encodable)? = nil,
+        as type: T.Type = T.self
+    ) async throws -> T {
+        var request = URLRequest(url: APIConfig.makeURL(base: baseURL, path: path))
+        request.httpMethod = method.rawValue
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+        if let body { request.httpBody = try JSONEncoder().encode(body) }
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+
+        guard (200...299).contains(http.statusCode) else {
+            let payload = try? JSONDecoder().decode(ServerErrorBody.self, from: data)
+            throw APIError.http(status: http.statusCode, code: payload?.code, message: payload?.error)
+        }
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     // MARK: - Device Token Registration
@@ -214,6 +337,12 @@ enum HTTPMethod: String {
 
 struct EmptyResponse: Decodable {}
 
+/// `{ "error": "...", "code": "..." }` — the mobile API's error body
+struct ServerErrorBody: Decodable {
+    let error: String?
+    let code: String?
+}
+
 struct ValidationError: Decodable {
     let message: String
     let errors: [String: [String]]?
@@ -228,9 +357,13 @@ enum APIError: LocalizedError {
     case serverError(Int)
     case unknown(Int)
     case networkError(Error)
+    /// Non-2xx from an auth endpoint, with the server's code/message
+    case http(status: Int, code: String?, message: String?)
 
     var errorDescription: String? {
         switch self {
+        case .http(let status, _, let message):
+            return message ?? String(localized: "error.api.unknownError \(status)")
         case .invalidResponse:
             return String(localized: "error.api.invalidResponse")
         case .unauthorized:

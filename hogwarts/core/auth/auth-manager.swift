@@ -33,12 +33,22 @@ final class AuthManager {
         currentUser?.userRole ?? .user
     }
 
+    /// The one in-flight refresh (restore, proactive and 401-driven refreshes all share it)
+    private var refreshInFlight: Task<Void, Error>?
+
     init() {
-        Task { await wireUnauthorizedHandler() }
+        Task { await wireAPIClient() }
     }
 
-    /// Wire up 401 handler on APIClient
-    private func wireUnauthorizedHandler() async {
+    /// Wire token provider, refresh handler and session-over handler on APIClient
+    private func wireAPIClient() async {
+        await api.setAuthorizationProvider {
+            KeychainService().get(.accessToken)
+        }
+        await api.setRefreshHandler { [weak self] in
+            guard let self else { return .transient }
+            return await self.refreshForAPI()
+        }
         await api.setOnUnauthorized { [weak self] in
             await MainActor.run {
                 self?.handleUnauthorized()
@@ -46,51 +56,71 @@ final class AuthManager {
         }
     }
 
-    /// Handle 401 response — sign out immediately
+    /// Session is over (refresh rejected) — sign out
     private func handleUnauthorized() {
         signOut()
     }
 
+    /// Refresh on behalf of APIClient: only a rejected refresh token ends the session
+    func refreshForAPI() async -> RefreshOutcome {
+        do {
+            try await refreshToken()
+            return .refreshed
+        } catch AuthError.refreshFailed {
+            return .sessionOver
+        } catch {
+            return .transient
+        }
+    }
+
     // MARK: - Sign In Methods
 
-    /// Sign in with email/password
-    /// Mirrors: signIn("credentials") in NextAuth
-    func signIn(email: String, password: String) async throws -> Session {
-        let request = SignInRequest(email: email, password: password)
+    /// Sign in with an email or a login code (+ school subdomain for codes)
+    /// Mirrors: POST /api/mobile/auth
+    func signIn(identifier: String, password: String, school: String? = nil) async throws -> Session {
+        let trimmedSchool = school?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = SignInRequest(
+            identifier: identifier.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: password,
+            school: (trimmedSchool?.isEmpty ?? true) ? nil : trimmedSchool
+        )
 
-        // Mock data for demo/testing (when backend is unavailable)
-        if password == "1234" {
-            let mockUser = User(
-                id: UUID().uuidString,
-                email: email,
-                name: email.split(separator: "@").first.map(String.init) ?? "User",
-                nameAr: nil,
-                role: "student",
-                schoolId: "demo-school",
-                imageUrl: nil,
-                phone: nil,
-                emailVerified: Date(),
-                isTwoFactorEnabled: false,
-                createdAt: Date(),
-                updatedAt: Date()
+        do {
+            let response: MobileAuthResponse = try await api.authRequest(
+                "/mobile/auth", method: .post, body: request
             )
-
-            let mockSession = Session(
-                user: mockUser,
-                schoolId: "demo-school",
-                accessToken: "mock_token_\(UUID().uuidString)",
-                refreshToken: nil,
-                expiresAt: Date().addingTimeInterval(86400)
-            )
-
-            try saveSession(mockSession)
-            return mockSession
+            let session = response.toSession()
+            try saveSession(session)
+            return session
+        } catch {
+            throw Self.mapAuthError(error)
         }
+    }
 
-        let session = try await api.post("/auth/signin", body: request, as: Session.self)
-
-        try saveSession(session)
-        return session
+    /// Map transport / server errors from the auth endpoints to `AuthError`
+    nonisolated static func mapAuthError(_ error: Error) -> AuthError {
+        if let authError = error as? AuthError { return authError }
+        if let apiError = error as? APIError, case .http(let status, let code, let message) = apiError {
+            switch status {
+            case 400 where code == "SCHOOL_REQUIRED":
+                return .schoolRequired
+            case 401:
+                if let message, message.localizedCaseInsensitiveContains("oauth") {
+                    return .rejected(String(localized: "auth.error.socialOnly", defaultValue: "This account signs in with Google"))
+                }
+                return .rejected(String(localized: "auth.error.invalidLogin", defaultValue: "Invalid email or password"))
+            case 403:
+                return .suspended
+            case 429:
+                return .tooManyAttempts
+            default:
+                return .rejected(String(localized: "auth.error.generic", defaultValue: "Something went wrong"))
+            }
+        }
+        if (error as NSError).domain == NSURLErrorDomain {
+            return .offline
+        }
+        return .rejected(String(localized: "auth.error.generic", defaultValue: "Something went wrong"))
     }
 
     /// Sign in with Google
@@ -136,63 +166,92 @@ final class AuthManager {
         if let refreshToken = session.refreshToken {
             try keychain.save(refreshToken, for: .refreshToken)
         }
+        if let data = try? JSONEncoder().encode(StoredSession(session: session)),
+           let json = String(data: data, encoding: .utf8) {
+            try? keychain.save(json, for: .sessionUser)
+        }
 
         self.session = session
         self.currentUser = session.user
         self.sessionState = .authenticated
     }
 
-    /// Restore session on app launch
-    /// Validates cached token, refreshes if near expiry, clears if expired
+    /// Rebuild the cached session from the keychain (no network)
+    private func loadStoredSession() -> Session? {
+        guard let token = keychain.get(.accessToken),
+              let json = keychain.get(.sessionUser),
+              let stored = try? JSONDecoder().decode(StoredSession.self, from: Data(json.utf8)) else {
+            return nil
+        }
+        return Session(
+            user: stored.user,
+            schoolId: stored.schoolId ?? stored.user.schoolId,
+            accessToken: token,
+            refreshToken: keychain.get(.refreshToken),
+            expiresAt: stored.expiresAt
+        )
+    }
+
+    /// Restore session on app launch (offline-first)
+    /// Uses the stored session + JWT `exp`; refreshes when expired / near expiry;
+    /// signs out only when the refresh token is rejected (401/403).
     func restoreSession() async {
-        guard let token = accessToken else {
-            sessionState = .unauthenticated
-            return
+        let cached = loadStoredSession()
+
+        if let cached {
+            session = cached
+            currentUser = cached.user
+            sessionState = .authenticated
         }
 
-        // Decode JWT to check expiry
-        if let payload = TokenPayload.decode(from: token) {
-            if payload.isExpired {
-                // Token expired — try refresh
-                do {
-                    try await refreshToken()
-                    return
-                } catch {
-                    signOut()
-                    return
-                }
-            }
+        let payload = accessToken.flatMap { TokenPayload.decode(from: $0) }
+        let needsRefresh = accessToken == nil || (payload.map { $0.isExpired || $0.shouldRefresh() } ?? false)
 
-            if payload.shouldRefresh() {
-                // Token near expiry — proactive refresh
-                try? await refreshToken()
+        if needsRefresh, keychain.get(.refreshToken) != nil {
+            do {
+                try await refreshToken()
+            } catch AuthError.refreshFailed {
+                signOut()
+            } catch {
+                // Offline / server trouble: keep the cached session
             }
         }
 
-        // Token still valid — fetch session from server
-        do {
-            let session = try await api.get("/auth/session", as: Session.self)
-            self.session = session
-            self.currentUser = session.user
-            self.sessionState = .authenticated
-        } catch {
+        if cached == nil && !(sessionState == .authenticated && currentUser != nil) {
+            // Tokens without a cached user and no successful refresh: nothing to show
             signOut()
         }
     }
 
-    /// Refresh the access token using the refresh token
+    /// Refresh the access token using the refresh token (serialized: one request at a time)
+    /// Throws `AuthError.refreshFailed` only when the server rejects the refresh token.
     func refreshToken() async throws {
+        if let running = refreshInFlight {
+            return try await running.value
+        }
+        let task = Task { try await self.performRefresh() }
+        refreshInFlight = task
+        defer { refreshInFlight = nil }
+        try await task.value
+    }
+
+    private func performRefresh() async throws {
         guard let refresh = keychain.get(.refreshToken) else {
             throw AuthError.refreshFailed
         }
 
-        let request = RefreshTokenRequest(refreshToken: refresh)
-
         do {
-            let session = try await api.post("/auth/refresh", body: request, as: Session.self)
-            try saveSession(session)
+            let response: MobileAuthResponse = try await api.authRequest(
+                "/mobile/auth", method: .put, headers: ["X-Refresh-Token": refresh]
+            )
+            try saveSession(response.toSession())
+        } catch let error as APIError {
+            if case .http(let status, _, _) = error, status == 401 || status == 403 {
+                throw AuthError.refreshFailed
+            }
+            throw AuthError.networkError(error)
         } catch {
-            throw AuthError.refreshFailed
+            throw AuthError.networkError(error)
         }
     }
 
@@ -211,8 +270,22 @@ final class AuthManager {
     func signOut() {
         keychain.delete(.accessToken)
         keychain.delete(.refreshToken)
+        keychain.delete(.sessionUser)
         currentUser = nil
         session = nil
         sessionState = .unauthenticated
+    }
+}
+
+/// What survives a relaunch besides the tokens (tokens stay in their own keychain items)
+struct StoredSession: Codable {
+    let user: User
+    let schoolId: String?
+    let expiresAt: Date?
+
+    init(session: Session) {
+        user = session.user
+        schoolId = session.schoolId
+        expiresAt = session.expiresAt
     }
 }
