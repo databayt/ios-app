@@ -13,6 +13,7 @@ struct TeacherDashboard: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 200)
             } else {
+                LiveEntryCard()
                 classesCard
                 pendingAttendanceCard
                 quickActionsCard

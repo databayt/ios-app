@@ -1,0 +1,8 @@
+// Shared build settings. A developer's own signing lives in an untracked Signing.xcconfig:
+//   DEVELOPMENT_TEAM = XXXXXXXXXX
+//   PRODUCT_BUNDLE_PREFIX = com.example      (optional; LiveKit's app group and
+//                                              broadcast extension id derive from it)
+DEVELOPMENT_TEAM =
+PRODUCT_BUNDLE_PREFIX = org.databayt
+
+#include? "Signing.xcconfig"

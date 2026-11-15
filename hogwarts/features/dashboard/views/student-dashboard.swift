@@ -14,6 +14,7 @@ struct StudentDashboard: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 200)
             } else {
+                LiveEntryCard()
                 scheduleCard
                 gradesCard
                 attendanceCard

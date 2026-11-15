@@ -7,23 +7,39 @@ options:
   generateEmptyDirectories: true
   groupSortPosition: top
 
+configs:
+  Debug: debug
+  Personal: debug
+  Release: release
+
+# DEVELOPMENT_TEAM / PRODUCT_BUNDLE_PREFIX come from Base.xcconfig, which optionally
+# includes an untracked Signing.xcconfig (a developer's own team). Do not set them below.
+configFiles:
+  Debug: Base.xcconfig
+  Personal: Base.xcconfig
+  Release: Base.xcconfig
+
 settings:
   base:
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "2"
     SWIFT_VERSION: "6.0"
-    DEVELOPMENT_TEAM: ""
+    HOGWARTS_API_BASE: "https://balqalam.com/api"
+    HOGWARTS_DEFAULT_SCHOOL: ""
     CODE_SIGN_STYLE: Automatic
     INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
     INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
     INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
     INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-    INFOPLIST_KEY_NSCameraUsageDescription: "Camera access is needed for QR code attendance check-in"
+    INFOPLIST_KEY_NSCameraUsageDescription: "Your camera is used in live classes and for QR attendance."
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
 packages:
+  LiveKit:
+    url: https://github.com/livekit/client-sdk-swift
+    exactVersion: 2.19.0
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     from: "7.0.0"
@@ -48,8 +64,8 @@ targets:
       properties:
         CFBundleDisplayName: Hogwarts
         CFBundleName: Hogwarts
-        CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -60,7 +76,14 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSCameraUsageDescription: "Camera access is needed for QR code attendance check-in"
+        NSCameraUsageDescription: "Your camera is used in live classes and for QR attendance."
+        NSMicrophoneUsageDescription: "Your microphone is used to speak in live classes."
+        UIBackgroundModes:
+          - audio
+        HWAPIBaseURL: "$(HOGWARTS_API_BASE)"
+        HWDefaultSchool: "$(HOGWARTS_DEFAULT_SCHOOL)"
+        RTCAppGroupIdentifier: "group.$(PRODUCT_BUNDLE_IDENTIFIER)"
+        RTCScreenSharingExtension: "$(PRODUCT_BUNDLE_IDENTIFIER).broadcast"
         ITSAppUsesNonExemptEncryption: false
         GIDClientID: "GOOGLE_CLIENT_ID"
         CFBundleURLTypes:
@@ -70,23 +93,58 @@ targets:
         FacebookAppID: "$(FACEBOOK_APP_ID)"
         FacebookClientToken: "$(FACEBOOK_CLIENT_TOKEN)"
         FacebookDisplayName: Hogwarts
-    entitlements:
-      path: hogwarts/resources/Hogwarts.entitlements
-      properties:
-        com.apple.developer.applesignin:
-          - Default
-        keychain-access-groups:
-          - $(AppIdentifierPrefix)org.databayt.Hogwarts
+    # Entitlements are static files (hogwarts/resources/*.entitlements), not generated, so the
+    # Personal configuration can swap in a file without Sign in with Apple.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.databayt.Hogwarts
+        PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_PREFIX).Hogwarts
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
         ENABLE_PREVIEWS: YES
+        CODE_SIGN_ENTITLEMENTS: hogwarts/resources/Hogwarts.entitlements
+      configs:
+        # Free Apple teams cannot sign Sign in with Apple: same entitlements minus it.
+        Personal:
+          CODE_SIGN_ENTITLEMENTS: hogwarts/resources/Hogwarts-Personal.entitlements
     dependencies:
+      - package: LiveKit
+      - target: BroadcastExtension
+        embed: true
       - package: GoogleSignIn
       - package: FacebookLogin
         product: FacebookLogin
+
+  BroadcastExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: BroadcastExtension
+        excludes:
+          - "**/.DS_Store"
+    info:
+      path: BroadcastExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Hogwarts Broadcast
+        CFBundleName: BroadcastExtension
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        RTCAppGroupIdentifier: "group.$(PRODUCT_BUNDLE_PREFIX).Hogwarts"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
+          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
+    entitlements:
+      path: BroadcastExtension/BroadcastExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.$(PRODUCT_BUNDLE_PREFIX).Hogwarts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_PREFIX).Hogwarts.broadcast
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: LiveKit
 
   HogwartsTests:
     type: bundle.unit-test

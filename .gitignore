@@ -55,3 +55,4 @@ build/
 # Misc
 *.log
 *.tmp
+Signing.xcconfig
