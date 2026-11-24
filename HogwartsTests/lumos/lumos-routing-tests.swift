@@ -110,7 +110,10 @@ struct PlatformNavTests {
         #expect(keys.contains("billing"))
         #expect(keys.contains("charts"))
         #expect(keys.contains("stats"))
-        #expect(keys == Set(PlatformNav.all.map(\.key)))
+        // The web's sidebar gates rows by role, not by seniority: a developer
+        // does not get a student's grades row.
+        #expect(!keys.contains("grades"))
+        #expect(keys.contains("school") && keys.contains("sales"))
     }
 
     @Test("a school's enabled modules hide the rows it turned off")
