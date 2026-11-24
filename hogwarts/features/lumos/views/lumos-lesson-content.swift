@@ -8,9 +8,10 @@ struct LumosLessonContent: View {
     let lessonId: String
 
     @Environment(AppRouter.self) private var router
-    @Environment(\.openURL) private var openURL
     @State private var viewModel: LumosLessonViewModel
     @State private var player: AVPlayer?
+    /// A resource the reader tapped, shown in the app's own browser.
+    @State private var browser: BrowserTarget?
 
     init(courseSlug: String, lessonId: String) {
         self.courseSlug = courseSlug
@@ -45,7 +46,22 @@ struct LumosLessonContent: View {
         .task {
             guard viewModel.page == nil else { return }
             await viewModel.load()
+        }
+        .onChange(of: viewModel.playURL) { _, _ in
             makePlayer()
+        }
+        .sheet(item: $browser) { target in
+            NavigationStack {
+                InAppBrowserView(url: target.url)
+                    .ignoresSafeArea()
+                    .navigationTitle(Text("lumos.resources"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(String(localized: "common.done")) { browser = nil }
+                        }
+                    }
+            }
         }
     }
 
@@ -390,7 +406,7 @@ struct LumosLessonContent: View {
 
     private func openResource(_ resource: LumosLessonResource) async {
         guard let url = await viewModel.resourceURL(resource) else { return }
-        openURL(url)
+        browser = BrowserTarget(url: url)
     }
 
     // MARK: - Footer
@@ -439,4 +455,10 @@ struct LumosLessonContent: View {
         )
         .foregroundStyle(filled ? .white : .primary)
     }
+}
+
+/// A resolved resource link, presented as a sheet.
+private struct BrowserTarget: Identifiable {
+    let id = UUID()
+    let url: URL
 }
