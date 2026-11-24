@@ -6,7 +6,7 @@ struct BookCatalogView: View {
     let tenantContext: TenantContext
 
     var body: some View {
-        NavigationStack {
+        Group {
             Group {
                 if viewModel.isLoading && viewModel.books.isEmpty {
                     ProgressView()

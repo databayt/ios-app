@@ -10,9 +10,10 @@ struct ProfileContent: View {
     @State private var viewModel = ProfileViewModel()
     @State private var showLogoutAlert = false
     @AppStorage("appTheme") private var appTheme: String = AppTheme.system.rawValue
+    @Environment(AppRouter.self) private var router
 
     var body: some View {
-        NavigationStack {
+        Group {
             List {
                 // Profile header
                 Section {
@@ -73,6 +74,28 @@ struct ProfileContent: View {
                     biometricToggleRow
                 }
 
+                // Learn — the features that live on the profile on the web too
+                Section(String(localized: "profile.learning")) {
+                    NavigationLink(value: AppRoute.lumosHome) {
+                        Label(String(localized: "nav.lumos"), systemImage: "sparkles")
+                    }
+                    NavigationLink(value: AppRoute.library) {
+                        Label(String(localized: "nav.library"), systemImage: "books.vertical")
+                    }
+                    NavigationLink(value: AppRoute.libraryBorrowings) {
+                        Label(String(localized: "library.myBorrowings"), systemImage: "bookmark")
+                    }
+                    NavigationLink(value: AppRoute.live) {
+                        Label(String(localized: "nav.live"), systemImage: "video.badge.waveform")
+                    }
+                    NavigationLink(value: AppRoute.reportCards) {
+                        Label(String(localized: "nav.reportCards"), systemImage: "doc.text.magnifyingglass")
+                    }
+                    NavigationLink(value: AppRoute.idCard) {
+                        Label(String(localized: "nav.idCard"), systemImage: "person.text.rectangle")
+                    }
+                }
+
                 // Appearance (inline theme picker)
                 Section(String(localized: "profile.appearance")) {
                     ForEach(AppTheme.allCases, id: \.self) { theme in
@@ -98,13 +121,13 @@ struct ProfileContent: View {
                 // Support
                 Section(String(localized: "profile.support")) {
                     NavigationLink {
-                        Text(String(localized: "profile.help"))
+                        WebPageView(href: "/help")
                     } label: {
                         Label(String(localized: "profile.help"), systemImage: "questionmark.circle")
                     }
 
                     NavigationLink {
-                        Text(String(localized: "profile.about"))
+                        AboutView()
                     } label: {
                         Label(String(localized: "profile.about"), systemImage: "info.circle")
                     }
@@ -123,6 +146,16 @@ struct ProfileContent: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .navigationTitle(String(localized: "profile.title"))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        router.isMenuPresented = true
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                    }
+                    .accessibilityLabel(String(localized: "nav.menu"))
+                }
+            }
             .alert(
                 String(localized: "profile.logout.title"),
                 isPresented: $showLogoutAlert

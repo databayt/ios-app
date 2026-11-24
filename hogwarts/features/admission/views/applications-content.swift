@@ -8,7 +8,7 @@ struct ApplicationsContent: View {
     let tenantContext: TenantContext
 
     var body: some View {
-        NavigationStack {
+        Group {
             Group {
                 if viewModel.isLoading && viewModel.applications.isEmpty {
                     ProgressView()

@@ -8,7 +8,7 @@ struct StudentsContent: View {
     @State private var searchText = ""
 
     var body: some View {
-        NavigationStack {
+        Group {
             VStack(spacing: 0) {
                 // Search and filters
                 StudentsToolbar(

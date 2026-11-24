@@ -5,7 +5,7 @@ struct StreamHomeContent: View {
     let tenantContext: TenantContext
 
     var body: some View {
-        NavigationStack {
+        Group {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if !viewModel.continueWatching.isEmpty {

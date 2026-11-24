@@ -31,12 +31,15 @@ struct StudentDashboard: View {
 
     @ViewBuilder
     private var scheduleCard: some View {
-        DashboardCard(
-            title: String(localized: "dashboard.todaySchedule"),
-            systemImage: "calendar"
-        ) {
-            scheduleContent
+        NavigationLink(value: AppRoute.timetable) {
+            DashboardCard(
+                title: String(localized: "dashboard.todaySchedule"),
+                systemImage: "calendar"
+            ) {
+                scheduleContent
+            }
         }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -89,12 +92,15 @@ struct StudentDashboard: View {
 
     @ViewBuilder
     private var gradesCard: some View {
-        DashboardCard(
-            title: String(localized: "dashboard.recentGrades"),
-            systemImage: "chart.bar"
-        ) {
-            gradesContent
+        NavigationLink(value: AppRoute.grades) {
+            DashboardCard(
+                title: String(localized: "dashboard.recentGrades"),
+                systemImage: "chart.bar"
+            ) {
+                gradesContent
+            }
         }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -131,12 +137,15 @@ struct StudentDashboard: View {
 
     @ViewBuilder
     private var attendanceCard: some View {
-        DashboardCard(
-            title: String(localized: "dashboard.attendance"),
-            systemImage: "checkmark.circle"
-        ) {
-            attendanceContent
+        NavigationLink(value: AppRoute.attendance) {
+            DashboardCard(
+                title: String(localized: "dashboard.attendance"),
+                systemImage: "checkmark.circle"
+            ) {
+                attendanceContent
+            }
         }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

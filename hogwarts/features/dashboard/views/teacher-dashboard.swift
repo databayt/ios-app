@@ -29,12 +29,15 @@ struct TeacherDashboard: View {
 
     @ViewBuilder
     private var classesCard: some View {
-        DashboardCard(
-            title: String(localized: "dashboard.todayClasses"),
-            systemImage: "person.3"
-        ) {
-            classesContent
+        NavigationLink(value: AppRoute.teacher) {
+            DashboardCard(
+                title: String(localized: "dashboard.todayClasses"),
+                systemImage: "person.3"
+            ) {
+                classesContent
+            }
         }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -83,12 +86,15 @@ struct TeacherDashboard: View {
 
     @ViewBuilder
     private var pendingAttendanceCard: some View {
-        DashboardCard(
-            title: String(localized: "dashboard.pendingAttendance"),
-            systemImage: "exclamationmark.circle"
-        ) {
-            pendingContent
+        NavigationLink(value: AppRoute.attendance) {
+            DashboardCard(
+                title: String(localized: "dashboard.pendingAttendance"),
+                systemImage: "exclamationmark.circle"
+            ) {
+                pendingContent
+            }
         }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

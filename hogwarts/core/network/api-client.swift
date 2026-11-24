@@ -310,6 +310,40 @@ actor APIClient {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    // MARK: - Media (protected Lumos paths)
+
+    /// Resolve a protected `/api/lumos/...` path to the signed URL it redirects
+    /// to, with this app's bearer token. Absolute URLs pass through untouched.
+    /// Returns nil when the request fails, so the caller can fall back.
+    func resolveMediaURL(_ raw: String) async -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let url: URL
+        if let absolute = URL(string: trimmed), absolute.scheme != nil {
+            url = absolute
+        } else {
+            // The base carries `/api`; media paths carry it too (`/api/lumos/...`).
+            var root = baseURL.absoluteString
+            if root.hasSuffix("/api") { root.removeLast(4) }
+            let path = trimmed.hasPrefix("/") ? trimmed : "/\(trimmed)"
+            guard let built = URL(string: root + path) else { return nil }
+            url = built
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        if let token = currentToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        guard let (_, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200...399).contains(http.statusCode) else {
+            return url
+        }
+        return http.url ?? url
+    }
+
     // MARK: - Device Token Registration
 
     func registerDeviceToken(_ token: String) async throws {

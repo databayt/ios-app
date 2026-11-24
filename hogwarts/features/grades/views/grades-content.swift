@@ -9,7 +9,7 @@ struct GradesContent: View {
     @State private var viewModel = GradesViewModel()
 
     var body: some View {
-        NavigationStack {
+        Group {
             VStack(spacing: 0) {
                 // Role-based content
                 Group {

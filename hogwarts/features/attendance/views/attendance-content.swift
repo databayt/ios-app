@@ -9,7 +9,7 @@ struct AttendanceContent: View {
     @State private var viewModel = AttendanceViewModel()
 
     var body: some View {
-        NavigationStack {
+        Group {
             VStack(spacing: 0) {
                 // Date picker
                 DatePicker(

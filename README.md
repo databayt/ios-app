@@ -75,6 +75,27 @@ Hogwarts/
 4. Screen     → Features/{name}/   # Full screens
 ```
 
+## Navigation
+
+The app is one `NavigationStack`, not one per screen. `MainTabView` owns the
+stack, `AppRouter` (in the environment) pushes into it, and `AppRoute` names
+every destination after the web page it mirrors.
+
+- **`core/navigation/platform-nav.swift`** — the web sidebar's `config.ts`,
+  ported literally: order, keys, hrefs, roles, `alwaysVisible`. The menu is
+  the web's menu.
+- **`core/navigation/href-router.swift`** — `HrefRouter` turns a web path into
+  a native route, or returns nil for a page the app has not rebuilt;
+  `WebHandoff` then opens that page on the school's own site
+  (`https://{subdomain}.balqalam.com/{lang}{path}?app=1`) inside
+  `InAppBrowserView`. A menu row is never dead.
+- **`core/navigation/app-route.swift`** — `AppRoute`, `AppRouter`, and
+  `AppRouteView`, which also registers each feature's own destinations
+  (`ExamsRoute`, `FeesRoute`, …) so a feature's internal links land in the
+  shared stack.
+- **`shared/atom/hw-app-grid.swift`** — the dashboard drawer: every feature
+  one tap away, filtered by role.
+
 ## Multi-Tenant Safety
 
 **CRITICAL**: Always include `schoolId` in API requests.

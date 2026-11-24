@@ -231,9 +231,18 @@ struct AdminDashboard: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                QuickNavItem(title: String(localized: "students.title"), icon: "person.2", color: .blue)
-                QuickNavItem(title: String(localized: "attendance.title"), icon: "checkmark.circle", color: .green)
-                QuickNavItem(title: String(localized: "grades.title"), icon: "chart.bar", color: .purple)
+                NavigationLink(value: AppRoute.students) {
+                    QuickNavItem(title: String(localized: "students.title"), icon: "person.2", color: .blue)
+                }
+                .buttonStyle(.plain)
+                NavigationLink(value: AppRoute.attendance) {
+                    QuickNavItem(title: String(localized: "attendance.title"), icon: "checkmark.circle", color: .green)
+                }
+                .buttonStyle(.plain)
+                NavigationLink(value: AppRoute.grades) {
+                    QuickNavItem(title: String(localized: "grades.title"), icon: "chart.bar", color: .purple)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

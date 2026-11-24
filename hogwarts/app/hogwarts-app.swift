@@ -90,9 +90,11 @@ struct ContentView: View {
 /// Guardian:  Dashboard, Schedule, Messages, Notifications, Profile
 struct MainTabView: View {
     @Environment(AuthManager.self) private var authManager
+    @Environment(TenantContext.self) private var tenantContext
 
     @State private var selectedTab: AppTab = .dashboard
     @State private var navigationState = NotificationNavigationState.shared
+    @State private var router = AppRouter()
 
     private var role: UserRole {
         authManager.role
@@ -104,64 +106,74 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            DashboardContent()
-                .tabItem {
-                    Label(
-                        String(localized: "tab.dashboard"),
-                        systemImage: "house"
-                    )
-                }
-                .tag(AppTab.dashboard)
+        NavigationStack(path: $router.path) {
+            TabView(selection: $selectedTab) {
+                DashboardContent()
+                    .tabItem {
+                        Label(
+                            String(localized: "tab.dashboard"),
+                            systemImage: "house"
+                        )
+                    }
+                    .tag(AppTab.dashboard)
 
-            if showStudentsTab {
-                StudentsContent()
+                if showStudentsTab {
+                    StudentsContent()
+                        .tabItem {
+                            Label(
+                                String(localized: "tab.students"),
+                                systemImage: "person.2"
+                            )
+                        }
+                        .tag(AppTab.students)
+                } else {
+                    TimetableContent()
+                        .tabItem {
+                            Label(
+                                String(localized: "tab.schedule"),
+                                systemImage: "calendar"
+                            )
+                        }
+                        .tag(AppTab.schedule)
+                }
+
+                MessagesContent()
                     .tabItem {
                         Label(
-                            String(localized: "tab.students"),
-                            systemImage: "person.2"
+                            String(localized: "tab.messages"),
+                            systemImage: "bubble.left.and.bubble.right"
                         )
                     }
-                    .tag(AppTab.students)
-            } else {
-                TimetableContent()
+                    .tag(AppTab.messages)
+
+                NotificationsContent()
                     .tabItem {
                         Label(
-                            String(localized: "tab.schedule"),
-                            systemImage: "calendar"
+                            String(localized: "tab.notifications"),
+                            systemImage: "bell"
                         )
                     }
-                    .tag(AppTab.schedule)
+                    .tag(AppTab.notifications)
+
+                ProfileContent()
+                    .tabItem {
+                        Label(
+                            String(localized: "tab.profile"),
+                            systemImage: "person.circle"
+                        )
+                    }
+                    .tag(AppTab.profile)
             }
-
-            MessagesContent()
-                .tabItem {
-                    Label(
-                        String(localized: "tab.messages"),
-                        systemImage: "bubble.left.and.bubble.right"
-                    )
-                }
-                .tag(AppTab.messages)
-
-            NotificationsContent()
-                .tabItem {
-                    Label(
-                        String(localized: "tab.notifications"),
-                        systemImage: "bell"
-                    )
-                }
-                .tag(AppTab.notifications)
-
-            ProfileContent()
-                .tabItem {
-                    Label(
-                        String(localized: "tab.profile"),
-                        systemImage: "person.circle"
-                    )
-                }
-                .tag(AppTab.profile)
+            .navigationDestination(for: AppRoute.self) { route in
+                AppRouteView(route: route)
+            }
         }
+        .environment(router)
         .environment(navigationState)
+        .sheet(isPresented: $router.isMenuPresented) {
+            PlatformMenuView()
+                .environment(router)
+        }
         .overlay(alignment: .top) {
             SyncStatusBanner()
         }

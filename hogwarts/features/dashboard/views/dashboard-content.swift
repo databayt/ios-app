@@ -5,13 +5,17 @@ import SwiftUI
 struct DashboardContent: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(TenantContext.self) private var tenantContext
+    @Environment(AppRouter.self) private var router
 
     var body: some View {
-        NavigationStack {
+        Group {
             ScrollView {
                 VStack(spacing: 20) {
                     // Welcome header
                     welcomeHeader
+
+                    // Every feature, one tap away — the phone's app drawer
+                    appGrid
 
                     // Role-specific content
                     roleSpecificContent
@@ -19,10 +23,28 @@ struct DashboardContent: View {
                 .padding()
             }
             .navigationTitle(String(localized: "dashboard.title"))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        router.isMenuPresented = true
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                    }
+                    .accessibilityLabel(String(localized: "nav.menu"))
+                }
+            }
             .refreshable {
                 // Refresh dashboard data
             }
         }
+    }
+
+    @ViewBuilder
+    private var appGrid: some View {
+        AppTileGrid(items: HomeTiles.items(for: authManager.role)) { tile in
+            router.push(tile.route)
+        }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder

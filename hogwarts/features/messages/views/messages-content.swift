@@ -10,7 +10,7 @@ struct MessagesContent: View {
     @State private var deepLinkConversationId: String?
 
     var body: some View {
-        NavigationStack {
+        Group {
             Group {
                 switch viewModel.viewState {
                 case .idle, .loading:
