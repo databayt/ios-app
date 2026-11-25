@@ -71,7 +71,8 @@ struct HrefRouterTests {
     @Test("role gates hold: a student never opens staff pages")
     func roleGates() {
         #expect(HrefRouter.route(for: "/parents", role: .student) == nil)
-        #expect(HrefRouter.route(for: "/parents", role: .guardian) == .guardianChildren)
+        // The parents directory is not rebuilt natively, for any role.
+        #expect(HrefRouter.route(for: "/parents", role: .guardian) == nil)
         #expect(HrefRouter.route(for: "/readiness", role: .student) == nil)
         #expect(HrefRouter.route(for: "/readiness", role: .teacher) == .admin)
         #expect(HrefRouter.route(for: "/exams/qbank", role: .student) == nil)
@@ -134,18 +135,19 @@ struct PlatformNavTests {
         }
     }
 
-    @Test("every menu row with a native mirror names a real screen")
+    @Test("every menu row's native mirror is the page its href opens")
     func nativeMirrors() {
-        for item in PlatformNav.all {
-            for role in item.roles {
-                let route = HrefRouter.nativeRoute(forKey: item.key, role: role)
-                if let route, route == .dashboard {
-                    #expect(item.key == "dashboard")
-                }
-            }
-        }
         #expect(HrefRouter.nativeRoute(forKey: "lumos", role: .student) == .lumosHome)
         #expect(HrefRouter.nativeRoute(forKey: "billing", role: .developer) == nil)
+        // A row and its href must agree, or the menu lies about where it goes.
+        for item in PlatformNav.all {
+            let viaKey = HrefRouter.nativeRoute(forKey: item.key, role: .admin)
+            let viaHref = HrefRouter.route(for: item.href, role: .admin)
+            #expect(
+                viaKey == viaHref,
+                "\(item.key): key sends \(String(describing: viaKey)), href sends \(String(describing: viaHref))"
+            )
+        }
     }
 }
 

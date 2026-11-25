@@ -27,7 +27,6 @@ enum HrefRouter {
         case "/events": return .events
         case "/school/analysis", "/readiness":
             return readinessRoles.contains(role) ? .admin : nil
-        case "/parents": return role == .guardian ? .guardianChildren : nil
         default: break
         }
 
@@ -49,7 +48,9 @@ enum HrefRouter {
         case "finance": return .fees
         case "grades": return .grades
         case "subjects": return .subjects
-        case "parents": return role == .guardian ? .guardianChildren : .adminStaff
+        // /parents is the parents directory, which the app has not rebuilt; a
+        // teacher row is not a parent. The web answers.
+        case "parents": return nil
         case "admission": return .admission
         case "students": return .students
         case "teachers": return .adminStaff
