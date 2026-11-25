@@ -154,6 +154,17 @@ xcodebuild test -scheme HogwartsUITests
 
 **Target**: 80%+ code coverage
 
+If `xcodebuild test` reports *"The test runner hung before establishing
+connection"*, the host app was launched with `--wait-for-debugger` and the
+debugger never attached — a host-level CoreSimulator fault, not a test
+failure (the log shows `testmanagerd` receiving 0 test sessions, and the
+sampled app sits at `_dyld_start`). Check `xcodebuild ... build-for-testing`
+first: it proves the bundle compiles. Reboot the Mac or reinstall the
+simulator runtime to repair the debugger path; the pure-Swift routing tests
+(`HrefRouter`, `PlatformNav`, `AppRouter`, `WebHandoff`) can also be run
+outside the simulator by compiling those three files into a macOS test
+package.
+
 ## Design Language
 
 The app uses Apple's native design language with iOS 26 aesthetic:
